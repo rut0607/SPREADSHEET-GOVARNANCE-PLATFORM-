@@ -1,0 +1,247 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model Role {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String?
+  is_active   Boolean  @default(true)
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  user_profiles    UserProfile[]
+  role_permissions RolePermission[]
+
+  @@map("roles")
+}
+
+model UserProfile {
+  id         String   @id
+  full_name  String
+  email      String   @unique
+  role_id    String?
+  is_active  Boolean  @default(true)
+  is_admin   Boolean  @default(false)
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  role                    Role?               @relation(fields: [role_id], references: [id])
+  spreadsheet_sources     SpreadsheetSource[]
+  role_permissions_review ApprovalRequest[]   @relation("ReviewedBy")
+  approval_requests       ApprovalRequest[]   @relation("RequestedBy")
+  user_permissions        UserPermission[]
+  audit_logs              AuditLog[]
+  notifications           Notification[]
+
+  @@map("user_profiles")
+}
+
+model SpreadsheetSource {
+  id                  String    @id @default(uuid())
+  name                String
+  source_type         String
+  file_path           String?
+  google_sheet_id     String?
+  google_sheet_url    String?
+  is_active           Boolean   @default(true)
+  sync_mode           String    @default("manual")
+  source_of_truth     String    @default("database")
+  conflict_resolution String    @default("keep_existing")
+  last_synced_at      DateTime?
+  created_by          String?
+  created_at          DateTime  @default(now())
+  updated_at          DateTime  @updatedAt
+
+  creator    UserProfile? @relation(fields: [created_by], references: [id])
+  worksheets Worksheet[]
+  versions   SpreadsheetVersion[]
+
+  @@map("spreadsheet_sources")
+}
+
+model SpreadsheetVersion {
+  id             String   @id @default(uuid())
+  source_id      String
+  version_number Int
+  file_path      String?
+  uploaded_by    String?
+  notes          String?
+  is_current     Boolean  @default(false)
+  created_at     DateTime @default(now())
+
+  source SpreadsheetSource @relation(fields: [source_id], references: [id])
+
+  @@map("spreadsheet_versions")
+}
+
+model Worksheet {
+  id           String   @id @default(uuid())
+  source_id    String
+  name         String
+  display_name String?
+  sheet_index  Int      @default(0)
+  is_active    Boolean  @default(true)
+  row_count    Int      @default(0)
+  created_at   DateTime @default(now())
+  updated_at   DateTime @updatedAt
+
+  source           SpreadsheetSource @relation(fields: [source_id], references: [id])
+  column_definitions ColumnDefinition[]
+  row_data         RowData[]
+  role_permissions RolePermission[]
+  user_permissions UserPermission[]
+  approval_requests ApprovalRequest[]
+  audit_logs       AuditLog[]
+
+  @@map("worksheets")
+}
+
+model ColumnDefinition {
+  id               String   @id @default(uuid())
+  worksheet_id     String
+  column_key       String
+  display_name     String
+  column_index     Int
+  data_type        String   @default("text")
+  is_required      Boolean  @default(false)
+  is_unique        Boolean  @default(false)
+  is_identifier    Boolean  @default(false)
+  dropdown_options Json?
+  validation_rules Json?
+  is_active        Boolean  @default(true)
+  created_at       DateTime @default(now())
+  updated_at       DateTime @updatedAt
+
+  worksheet        Worksheet        @relation(fields: [worksheet_id], references: [id])
+  role_permissions RolePermission[]
+  user_permissions UserPermission[]
+  approval_requests ApprovalRequest[]
+  audit_logs       AuditLog[]
+
+  @@unique([worksheet_id, column_key])
+  @@map("column_definitions")
+}
+
+model RowData {
+  id             String   @id @default(uuid())
+  worksheet_id   String
+  row_index      Int
+  row_identifier String?
+  data           Json     @default("{}")
+  is_deleted     Boolean  @default(false)
+  created_at     DateTime @default(now())
+  updated_at     DateTime @updatedAt
+
+  worksheet         Worksheet         @relation(fields: [worksheet_id], references: [id])
+  approval_requests ApprovalRequest[]
+  audit_logs        AuditLog[]
+
+  @@map("row_data")
+}
+
+model RolePermission {
+  id               String   @id @default(uuid())
+  role_id          String
+  worksheet_id     String
+  column_id        String
+  can_view         Boolean  @default(true)
+  can_edit         Boolean  @default(false)
+  requires_approval Boolean @default(false)
+  created_at       DateTime @default(now())
+  updated_at       DateTime @updatedAt
+
+  role      Role             @relation(fields: [role_id], references: [id])
+  worksheet Worksheet        @relation(fields: [worksheet_id], references: [id])
+  column    ColumnDefinition @relation(fields: [column_id], references: [id])
+
+  @@unique([role_id, worksheet_id, column_id])
+  @@map("role_permissions")
+}
+
+model UserPermission {
+  id               String   @id @default(uuid())
+  user_id          String
+  worksheet_id     String
+  column_id        String
+  can_view         Boolean  @default(true)
+  can_edit         Boolean  @default(false)
+  requires_approval Boolean @default(false)
+  created_at       DateTime @default(now())
+  updated_at       DateTime @updatedAt
+
+  user      UserProfile      @relation(fields: [user_id], references: [id])
+  worksheet Worksheet        @relation(fields: [worksheet_id], references: [id])
+  column    ColumnDefinition @relation(fields: [column_id], references: [id])
+
+  @@unique([user_id, worksheet_id, column_id])
+  @@map("user_permissions")
+}
+
+model ApprovalRequest {
+  id              String    @id @default(uuid())
+  requested_by    String
+  reviewed_by     String?
+  worksheet_id    String
+  row_id          String
+  column_id       String
+  previous_value  String?
+  requested_value String?
+  status          String    @default("pending")
+  review_notes    String?
+  created_at      DateTime  @default(now())
+  reviewed_at     DateTime?
+  updated_at      DateTime  @updatedAt
+
+  requester     UserProfile      @relation("RequestedBy", fields: [requested_by], references: [id])
+  reviewer      UserProfile?     @relation("ReviewedBy", fields: [reviewed_by], references: [id])
+  worksheet     Worksheet        @relation(fields: [worksheet_id], references: [id])
+  row           RowData          @relation(fields: [row_id], references: [id])
+  column        ColumnDefinition @relation(fields: [column_id], references: [id])
+  notifications Notification[]
+
+  @@map("approval_requests")
+}
+
+model AuditLog {
+  id             String   @id @default(uuid())
+  user_id        String?
+  action_type    String
+  worksheet_id   String?
+  row_id         String?
+  column_id      String?
+  previous_value String?
+  new_value      String?
+  metadata       Json?
+  ip_address     String?
+  created_at     DateTime @default(now())
+
+  user      UserProfile?      @relation(fields: [user_id], references: [id])
+  worksheet Worksheet?        @relation(fields: [worksheet_id], references: [id])
+  row       RowData?          @relation(fields: [row_id], references: [id])
+  column    ColumnDefinition? @relation(fields: [column_id], references: [id])
+
+  @@map("audit_logs")
+}
+
+model Notification {
+  id                  String   @id @default(uuid())
+  user_id             String
+  title               String
+  message             String
+  type                String   @default("info")
+  is_read             Boolean  @default(false)
+  related_approval_id String?
+  created_at          DateTime @default(now())
+
+  user             UserProfile      @relation(fields: [user_id], references: [id])
+  related_approval ApprovalRequest? @relation(fields: [related_approval_id], references: [id])
+
+  @@map("notifications")
+}

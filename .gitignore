@@ -1,0 +1,23 @@
+# Environment Variables - Never commit these
+.env
+server/.env
+client/.env
+
+# Dependencies
+node_modules/
+client/node_modules/
+server/node_modules/
+
+# Build outputs
+client/build/
+server/dist/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Mac files
+.DS_Store
+
+# VS Code
+.vscode/settings.json
