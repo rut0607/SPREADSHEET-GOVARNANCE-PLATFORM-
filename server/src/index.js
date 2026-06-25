@@ -30,6 +30,7 @@ app.use('/api/auth', require('./routes/auth'));
 app.use('/api/users', require('./routes/users'));
 app.use('/api/roles', require('./routes/roles'));
 app.use('/api/spreadsheets', require('./routes/spreadsheets'));
+app.use('/api/permissions', require('./routes/permissions'));
 app.use('/api/approvals', require('./routes/approvals'));
 app.use('/api/notifications', require('./routes/notifications'));
 
