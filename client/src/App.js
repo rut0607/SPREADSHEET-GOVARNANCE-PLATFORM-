@@ -19,6 +19,7 @@ import EmployeeDashboard from './pages/employee/EmployeeDashboard';
 import DataViewer from './pages/employee/DataViewer';
 import MyApprovals from './pages/employee/MyApprovals';
 import VersionManagement from './pages/admin/VersionManagement';
+import ColumnConfig from './pages/admin/ColumnConfig';
 
 const NotFound = () => (
   <div className="p-6">
@@ -95,6 +96,10 @@ const AppRoutes = () => {
 
       <Route path="/admin/versions" element={
   <AdminRoute><AppLayout><VersionManagement /></AppLayout></AdminRoute>
+} />
+
+<Route path="/admin/columns" element={
+  <AdminRoute><AppLayout><ColumnConfig /></AppLayout></AdminRoute>
 } />
       <Route path="*" element={<NotFound />} />
     </Routes>

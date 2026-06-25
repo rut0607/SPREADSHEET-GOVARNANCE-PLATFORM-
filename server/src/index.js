@@ -31,6 +31,7 @@ app.use('/api/permissions', require('./routes/permissions'));
 app.use('/api/approvals', require('./routes/approvals'));
 app.use('/api/notifications', require('./routes/notifications'));
 app.use('/api/versions', require('./routes/versions'));
+app.use('/api/google-sheets', require('./routes/googleSheets'));
 
 app.use((err, req, res, next) => {
   console.error(err.stack);
