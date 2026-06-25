@@ -35,20 +35,21 @@ const employeeLinks = [
   { to: '/notifications', icon: Bell, label: 'Notifications' },
 ];
 
-const Sidebar = ({ isOpen }) => {
+const Sidebar = ({ isOpen, onClose }) => {
   const { isAdmin } = useAuth();
   const location = useLocation();
   const links = isAdmin ? adminLinks : employeeLinks;
 
   return (
     <aside className={`fixed left-0 top-14 h-full bg-white border-r border-gray-200 transition-all duration-300 z-40 ${isOpen ? 'w-64' : 'w-0 overflow-hidden'}`}>
-      <nav className="p-4 space-y-1">
+      <nav className="p-4 space-y-1 overflow-y-auto h-full pb-20">
         {links.map(({ to, icon: Icon, label }) => {
           const isActive = location.pathname === to;
           return (
             <Link
               key={to}
               to={to}
+              onClick={onClose}
               className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-sm font-medium ${
                 isActive
                   ? 'bg-primary-50 text-primary-700 border border-primary-200'

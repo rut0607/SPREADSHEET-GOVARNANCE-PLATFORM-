@@ -1,13 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
-import { FileSpreadsheet, Search, Edit2, Send, X, Check } from 'lucide-react';
+import { FileSpreadsheet, Search, Send, X, Check, ChevronLeft, ChevronRight } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 const DataViewer = () => {
   const { user } = useAuth();
   const [sources, setSources] = useState([]);
-  const [selectedSource, setSelectedSource] = useState(null);
   const [selectedWorksheet, setSelectedWorksheet] = useState(null);
   const [worksheetData, setWorksheetData] = useState(null);
   const [permissions, setPermissions] = useState([]);
@@ -17,6 +16,8 @@ const DataViewer = () => {
   const [editingCell, setEditingCell] = useState(null);
   const [editValue, setEditValue] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [page, setPage] = useState(1);
+  const [limit] = useState(50);
 
   useEffect(() => {
     fetchSources();
@@ -28,8 +29,7 @@ const DataViewer = () => {
       const sources = res.data.data.sources;
       setSources(sources);
       if (sources.length > 0 && sources[0].worksheets?.length > 0) {
-        setSelectedSource(sources[0]);
-        await loadWorksheet(sources[0].worksheets[0]);
+        await loadWorksheet(sources[0].worksheets[0], 1);
       }
     } catch (error) {
       toast.error('Failed to fetch data');
@@ -38,12 +38,15 @@ const DataViewer = () => {
     }
   };
 
-  const loadWorksheet = async (worksheet) => {
+  const loadWorksheet = async (worksheet, pageNum = 1) => {
     setSelectedWorksheet(worksheet);
     setDataLoading(true);
+    setPage(pageNum);
+    setSearch('');
+    setEditingCell(null);
     try {
       const [dataRes, permsRes] = await Promise.all([
-        api.get(`/spreadsheets/worksheet/${worksheet.id}/data?limit=200`),
+        api.get(`/spreadsheets/worksheet/${worksheet.id}/data?page=${pageNum}&limit=${limit}`),
         api.get(`/permissions/effective/${user.id}/worksheet/${worksheet.id}`)
       ]);
       setWorksheetData(dataRes.data.data);
@@ -55,20 +58,29 @@ const DataViewer = () => {
     }
   };
 
-  const getPermission = (columnId) => {
-    return permissions.find(p => p.column_id === columnId);
+  const changePage = async (newPage) => {
+    if (!selectedWorksheet) return;
+    setDataLoading(true);
+    setPage(newPage);
+    try {
+      const res = await api.get(`/spreadsheets/worksheet/${selectedWorksheet.id}/data?page=${newPage}&limit=${limit}`);
+      setWorksheetData(res.data.data);
+    } catch (error) {
+      toast.error('Failed to load page');
+    } finally {
+      setDataLoading(false);
+    }
   };
 
-  const canEdit = (columnId) => {
-    if (user.is_admin) return true;
-    const perm = getPermission(columnId);
-    return perm?.can_edit || false;
-  };
+  const getPermission = (columnId) => permissions.find(p => p.column_id === columnId);
+  const canEdit = (columnId) => user.is_admin || getPermission(columnId)?.can_edit || false;
+  const needsApproval = (columnId) => !user.is_admin && getPermission(columnId)?.requires_approval || false;
 
-  const needsApproval = (columnId) => {
-    if (user.is_admin) return false;
-    const perm = getPermission(columnId);
-    return perm?.requires_approval || false;
+  const getColumnDropdownOptions = (column) => {
+    if (column.data_type === 'dropdown' && column.dropdown_options) {
+      return Array.isArray(column.dropdown_options) ? column.dropdown_options : [];
+    }
+    return [];
   };
 
   const handleCellClick = (row, column) => {
@@ -96,7 +108,12 @@ const DataViewer = () => {
         toast.success('Change submitted for approval');
       } else {
         const updatedData = { ...row.data, [column.column_key]: editValue };
-        await api.put(`/spreadsheets/row/${row.id}`, { data: updatedData });
+        await api.put(`/spreadsheets/row/${row.id}`, {
+          data: updatedData,
+          column_id: column.id,
+          previous_value: row.data[column.column_key] || '',
+          new_value: editValue
+        });
         setWorksheetData(prev => ({
           ...prev,
           rows: prev.rows.map(r =>
@@ -114,7 +131,7 @@ const DataViewer = () => {
   };
 
   const filteredRows = worksheetData?.rows.filter(row =>
-    Object.values(row.data).some(val =>
+    search === '' || Object.values(row.data).some(val =>
       val?.toString().toLowerCase().includes(search.toLowerCase())
     )
   ) || [];
@@ -151,7 +168,7 @@ const DataViewer = () => {
           source.worksheets?.map(ws => (
             <button
               key={ws.id}
-              onClick={() => { setSelectedSource(source); loadWorksheet(ws); }}
+              onClick={() => loadWorksheet(ws, 1)}
               className={`px-3 py-1.5 text-sm rounded-lg font-medium transition-colors ${
                 selectedWorksheet?.id === ws.id
                   ? 'bg-primary-600 text-white'
@@ -183,7 +200,8 @@ const DataViewer = () => {
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
           <div className="p-4 border-b border-gray-100 flex items-center justify-between">
             <p className="text-sm text-gray-500">
-              {filteredRows.length} rows • {worksheetData.worksheet.columns.length} columns
+              {worksheetData.pagination.total} total rows •
+              showing {((page - 1) * limit) + 1} to {Math.min(page * limit, worksheetData.pagination.total)}
             </p>
             <div className="flex items-center gap-4 text-xs text-gray-400">
               <span className="flex items-center gap-1">
@@ -200,6 +218,7 @@ const DataViewer = () => {
               </span>
             </div>
           </div>
+
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-gray-50 border-b border-gray-200">
@@ -209,7 +228,9 @@ const DataViewer = () => {
                       <div className="flex items-center gap-2">
                         {col.display_name}
                         {canEdit(col.id) && (
-                          <span className={`w-2 h-2 rounded-full ${needsApproval(col.id) ? 'bg-orange-400' : 'bg-green-400'}`}></span>
+                          <span className={`w-2 h-2 rounded-full ${
+                            needsApproval(col.id) ? 'bg-orange-400' : 'bg-green-400'
+                          }`}></span>
                         )}
                       </div>
                     </th>
@@ -223,6 +244,7 @@ const DataViewer = () => {
                       const isEditing = editingCell?.rowId === row.id && editingCell?.columnId === col.id;
                       const editable = canEdit(col.id);
                       const approval = needsApproval(col.id);
+                      const dropdownOptions = getColumnDropdownOptions(col);
 
                       return (
                         <td
@@ -238,17 +260,31 @@ const DataViewer = () => {
                         >
                           {isEditing ? (
                             <div className="flex items-center gap-1">
-                              <input
-                                type="text"
-                                value={editValue}
-                                onChange={e => setEditValue(e.target.value)}
-                                className="border border-primary-400 rounded px-2 py-1 text-sm outline-none w-32 focus:ring-2 focus:ring-primary-300"
-                                autoFocus
-                                onKeyDown={e => {
-                                  if (e.key === 'Enter') handleSaveEdit(row, col);
-                                  if (e.key === 'Escape') setEditingCell(null);
-                                }}
-                              />
+                              {dropdownOptions.length > 0 ? (
+                                <select
+                                  value={editValue}
+                                  onChange={e => setEditValue(e.target.value)}
+                                  className="border border-primary-400 rounded px-2 py-1 text-sm outline-none focus:ring-2 focus:ring-primary-300"
+                                  autoFocus
+                                >
+                                  <option value="">Select...</option>
+                                  {dropdownOptions.map(opt => (
+                                    <option key={opt} value={opt}>{opt}</option>
+                                  ))}
+                                </select>
+                              ) : (
+                                <input
+                                  type={col.data_type === 'number' || col.data_type === 'currency' ? 'number' : 'text'}
+                                  value={editValue}
+                                  onChange={e => setEditValue(e.target.value)}
+                                  className="border border-primary-400 rounded px-2 py-1 text-sm outline-none w-32 focus:ring-2 focus:ring-primary-300"
+                                  autoFocus
+                                  onKeyDown={e => {
+                                    if (e.key === 'Enter') handleSaveEdit(row, col);
+                                    if (e.key === 'Escape') setEditingCell(null);
+                                  }}
+                                />
+                              )}
                               <button
                                 onClick={() => handleSaveEdit(row, col)}
                                 disabled={submitting}
@@ -276,6 +312,59 @@ const DataViewer = () => {
               </tbody>
             </table>
           </div>
+
+          {worksheetData.pagination.total_pages > 1 && search === '' && (
+            <div className="p-4 border-t border-gray-100 flex items-center justify-between">
+              <p className="text-sm text-gray-500">
+                Page {page} of {worksheetData.pagination.total_pages}
+              </p>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => changePage(page - 1)}
+                  disabled={page === 1}
+                  className="flex items-center gap-1 px-3 py-1.5 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  <ChevronLeft size={16} />
+                  Previous
+                </button>
+                <div className="flex gap-1">
+                  {Array.from({ length: Math.min(5, worksheetData.pagination.total_pages) }, (_, i) => {
+                    let pageNum;
+                    if (worksheetData.pagination.total_pages <= 5) {
+                      pageNum = i + 1;
+                    } else if (page <= 3) {
+                      pageNum = i + 1;
+                    } else if (page >= worksheetData.pagination.total_pages - 2) {
+                      pageNum = worksheetData.pagination.total_pages - 4 + i;
+                    } else {
+                      pageNum = page - 2 + i;
+                    }
+                    return (
+                      <button
+                        key={pageNum}
+                        onClick={() => changePage(pageNum)}
+                        className={`w-8 h-8 rounded-lg text-sm font-medium transition-colors ${
+                          page === pageNum
+                            ? 'bg-primary-600 text-white'
+                            : 'border border-gray-200 text-gray-600 hover:bg-gray-50'
+                        }`}
+                      >
+                        {pageNum}
+                      </button>
+                    );
+                  })}
+                </div>
+                <button
+                  onClick={() => changePage(page + 1)}
+                  disabled={page === worksheetData.pagination.total_pages}
+                  className="flex items-center gap-1 px-3 py-1.5 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  Next
+                  <ChevronRight size={16} />
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       ) : null}
     </div>

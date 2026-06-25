@@ -33,6 +33,9 @@ app.use('/api/notifications', require('./routes/notifications'));
 app.use('/api/versions', require('./routes/versions'));
 app.use('/api/google-sheets', require('./routes/googleSheets'));
 
+const { startScheduledSync } = require('./services/syncService');
+startScheduledSync();
+
 app.use((err, req, res, next) => {
   console.error(err.stack);
   res.status(err.status || 500).json({

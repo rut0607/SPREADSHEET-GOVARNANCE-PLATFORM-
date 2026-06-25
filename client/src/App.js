@@ -28,21 +28,27 @@ const NotFound = () => (
 );
 
 const AppLayout = ({ children }) => {
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
   return (
     <div className="min-h-screen bg-gray-50">
       <Navbar
         onMenuToggle={() => setSidebarOpen(!sidebarOpen)}
         sidebarOpen={sidebarOpen}
       />
-      <Sidebar isOpen={sidebarOpen} />
-      <main className={`pt-14 transition-all duration-300 ${sidebarOpen ? 'ml-64' : 'ml-0'}`}>
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 bg-black bg-opacity-30 z-30 lg:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+      <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+      <main className={`pt-14 transition-all duration-300 ${sidebarOpen ? 'lg:ml-64' : 'ml-0'}`}>
         {children}
       </main>
     </div>
   );
 };
-
 const AppRoutes = () => {
   const { isAuthenticated, isAdmin, loading } = useAuth();
   if (loading) return <LoadingSpinner />;
