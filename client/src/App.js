@@ -18,6 +18,7 @@ import NotificationsPage from './pages/admin/Notifications';
 import EmployeeDashboard from './pages/employee/EmployeeDashboard';
 import DataViewer from './pages/employee/DataViewer';
 import MyApprovals from './pages/employee/MyApprovals';
+import VersionManagement from './pages/admin/VersionManagement';
 
 const NotFound = () => (
   <div className="p-6">
@@ -91,6 +92,10 @@ const AppRoutes = () => {
       <Route path="/" element={
         <Navigate to={isAuthenticated ? (isAdmin ? '/admin' : '/dashboard') : '/login'} replace />
       } />
+
+      <Route path="/admin/versions" element={
+  <AdminRoute><AppLayout><VersionManagement /></AppLayout></AdminRoute>
+} />
       <Route path="*" element={<NotFound />} />
     </Routes>
   );

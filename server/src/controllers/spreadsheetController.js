@@ -6,46 +6,30 @@ const path = require('path');
 const uploadExcel = async (req, res) => {
   try {
     if (!req.file) {
-      return res.status(400).json({
-        success: false,
-        message: 'No file uploaded'
-      });
+      return res.status(400).json({ success: false, message: 'No file uploaded' });
     }
 
     const { name } = req.body;
     if (!name) {
-      return res.status(400).json({
-        success: false,
-        message: 'Spreadsheet name is required'
-      });
+      return res.status(400).json({ success: false, message: 'Spreadsheet name is required' });
     }
 
-    // Read the Excel file
     const workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
     const sheetNames = workbook.SheetNames;
 
     if (sheetNames.length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: 'Excel file contains no worksheets'
-      });
+      return res.status(400).json({ success: false, message: 'Excel file contains no worksheets' });
     }
 
-    // Upload file to Supabase Storage
     const fileName = `${Date.now()}_${req.file.originalname}`;
     const filePath = `excel/${fileName}`;
 
     const { error: uploadError } = await supabaseAdmin.storage
       .from(process.env.SUPABASE_STORAGE_BUCKET)
-      .upload(filePath, req.file.buffer, {
-        contentType: req.file.mimetype
-      });
+      .upload(filePath, req.file.buffer, { contentType: req.file.mimetype });
 
-    if (uploadError) {
-      console.error('Storage upload error:', uploadError);
-    }
+    if (uploadError) console.error('Storage upload error:', uploadError);
 
-    // Create spreadsheet source
     const source = await prisma.spreadsheetSource.create({
       data: {
         name,
@@ -58,7 +42,6 @@ const uploadExcel = async (req, res) => {
       }
     });
 
-    // Create initial version
     await prisma.spreadsheetVersion.create({
       data: {
         source_id: source.id,
@@ -70,25 +53,20 @@ const uploadExcel = async (req, res) => {
       }
     });
 
-    // Process each worksheet
     const processedSheets = [];
 
     for (let i = 0; i < sheetNames.length; i++) {
       const sheetName = sheetNames[i];
       const worksheet = workbook.Sheets[sheetName];
-
-      // Convert to JSON
       const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
 
       if (jsonData.length === 0) continue;
 
-      // First row is headers
       const headers = jsonData[0];
       const dataRows = jsonData.slice(1).filter(row =>
         row.some(cell => cell !== '' && cell !== null && cell !== undefined)
       );
 
-      // Create worksheet record
       const ws = await prisma.worksheet.create({
         data: {
           source_id: source.id,
@@ -100,7 +78,6 @@ const uploadExcel = async (req, res) => {
         }
       });
 
-      // Detect and create column definitions
       const columnDefs = [];
       for (let j = 0; j < headers.length; j++) {
         const header = headers[j];
@@ -108,8 +85,6 @@ const uploadExcel = async (req, res) => {
 
         const columnKey = header.toString().toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
         const displayName = header.toString();
-
-        // Detect data type from first few rows
         const sampleValues = dataRows.slice(0, 5).map(row => row[j]).filter(v => v !== '' && v !== null);
         const dataType = detectDataType(sampleValues);
 
@@ -130,7 +105,6 @@ const uploadExcel = async (req, res) => {
         columnDefs.push({ ...colDef, originalIndex: j });
       }
 
-      // Store row data
       for (let r = 0; r < dataRows.length; r++) {
         const row = dataRows[r];
         const rowData = {};
@@ -140,41 +114,28 @@ const uploadExcel = async (req, res) => {
           rowData[col.column_key] = cellValue !== undefined ? cellValue.toString() : '';
         }
 
-        const identifier = row[0] ? row[0].toString() : `row_${r + 1}`;
-
         await prisma.rowData.create({
           data: {
             worksheet_id: ws.id,
             row_index: r,
-            row_identifier: identifier,
+            row_identifier: row[0] ? row[0].toString() : `row_${r + 1}`,
             data: rowData,
             is_deleted: false
           }
         });
       }
 
-      processedSheets.push({
-        name: sheetName,
-        columns: columnDefs.length,
-        rows: dataRows.length
-      });
+      processedSheets.push({ name: sheetName, columns: columnDefs.length, rows: dataRows.length });
     }
 
     res.status(201).json({
       success: true,
       message: 'Excel file uploaded and processed successfully',
-      data: {
-        source_id: source.id,
-        name: source.name,
-        sheets_processed: processedSheets
-      }
+      data: { source_id: source.id, name: source.name, sheets_processed: processedSheets }
     });
   } catch (error) {
     console.error('Upload Excel error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to process Excel file'
-    });
+    res.status(500).json({ success: false, message: 'Failed to process Excel file' });
   }
 };
 
@@ -187,7 +148,6 @@ const detectDataType = (values) => {
 
   for (const val of values) {
     const str = val.toString().trim();
-
     if (str.startsWith('$') || str.startsWith('₹') || str.includes('INR')) {
       currencyCount++;
     } else if (!isNaN(str) && str !== '') {
@@ -213,23 +173,15 @@ const getAllSources = async (req, res) => {
           where: { is_active: true },
           select: { id: true, name: true, display_name: true, row_count: true }
         },
-        creator: {
-          select: { id: true, full_name: true, email: true }
-        }
+        creator: { select: { id: true, full_name: true, email: true } }
       },
       orderBy: { created_at: 'desc' }
     });
 
-    res.json({
-      success: true,
-      data: { sources }
-    });
+    res.json({ success: true, data: { sources } });
   } catch (error) {
     console.error('Get all sources error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to fetch spreadsheet sources'
-    });
+    res.status(500).json({ success: false, message: 'Failed to fetch spreadsheet sources' });
   }
 };
 
@@ -253,30 +205,20 @@ const getSourceById = async (req, res) => {
     });
 
     if (!source) {
-      return res.status(404).json({
-        success: false,
-        message: 'Spreadsheet source not found'
-      });
+      return res.status(404).json({ success: false, message: 'Spreadsheet source not found' });
     }
 
-    res.json({
-      success: true,
-      data: { source }
-    });
+    res.json({ success: true, data: { source } });
   } catch (error) {
     console.error('Get source error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to fetch spreadsheet source'
-    });
+    res.status(500).json({ success: false, message: 'Failed to fetch spreadsheet source' });
   }
 };
 
 const getWorksheetData = async (req, res) => {
   try {
     const { worksheetId } = req.params;
-    const { page = 1, limit = 100, search = '' } = req.query;
-
+    const { page = 1, limit = 100 } = req.query;
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
     const worksheet = await prisma.worksheet.findUnique({
@@ -290,19 +232,11 @@ const getWorksheetData = async (req, res) => {
     });
 
     if (!worksheet) {
-      return res.status(404).json({
-        success: false,
-        message: 'Worksheet not found'
-      });
+      return res.status(404).json({ success: false, message: 'Worksheet not found' });
     }
 
-    const whereClause = {
-      worksheet_id: worksheetId,
-      is_deleted: false
-    };
-
+    const whereClause = { worksheet_id: worksheetId, is_deleted: false };
     const totalRows = await prisma.rowData.count({ where: whereClause });
-
     const rows = await prisma.rowData.findMany({
       where: whereClause,
       orderBy: { row_index: 'asc' },
@@ -330,10 +264,43 @@ const getWorksheetData = async (req, res) => {
     });
   } catch (error) {
     console.error('Get worksheet data error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to fetch worksheet data'
+    res.status(500).json({ success: false, message: 'Failed to fetch worksheet data' });
+  }
+};
+
+const updateRow = async (req, res) => {
+  try {
+    const { rowId } = req.params;
+    const { data, column_id, previous_value, new_value } = req.body;
+
+    const row = await prisma.rowData.findUnique({ where: { id: rowId } });
+
+    if (!row) {
+      return res.status(404).json({ success: false, message: 'Row not found' });
+    }
+
+    const updated = await prisma.rowData.update({
+      where: { id: rowId },
+      data: { data }
     });
+
+    await prisma.auditLog.create({
+      data: {
+        user_id: req.user.id,
+        action_type: 'direct_edit',
+        worksheet_id: row.worksheet_id,
+        row_id: rowId,
+        column_id: column_id || null,
+        previous_value: previous_value || null,
+        new_value: new_value || JSON.stringify(data),
+        metadata: { source: 'direct_edit' }
+      }
+    });
+
+    res.json({ success: true, message: 'Row updated successfully', data: { row: updated } });
+  } catch (error) {
+    console.error('Update row error:', error);
+    res.status(500).json({ success: false, message: 'Failed to update row' });
   }
 };
 
@@ -341,5 +308,6 @@ module.exports = {
   uploadExcel,
   getAllSources,
   getSourceById,
-  getWorksheetData
+  getWorksheetData,
+  updateRow
 };

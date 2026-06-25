@@ -9,9 +9,9 @@ import {
   CheckSquare,
   Bell,
   Activity,
-  Settings,
   Database,
-  Eye
+  Eye,
+  History
 } from 'lucide-react';
 
 const adminLinks = [
@@ -19,6 +19,7 @@ const adminLinks = [
   { to: '/admin/users', icon: Users, label: 'Users' },
   { to: '/admin/roles', icon: Shield, label: 'Roles & Permissions' },
   { to: '/admin/spreadsheets', icon: FileSpreadsheet, label: 'Spreadsheets' },
+  { to: '/admin/versions', icon: History, label: 'Version Management' },
   { to: '/admin/approvals', icon: CheckSquare, label: 'Approvals' },
   { to: '/admin/activity', icon: Activity, label: 'Activity Feed' },
   { to: '/admin/audit', icon: Database, label: 'Audit Logs' },
