@@ -39,6 +39,11 @@ model UserProfile {
   user_permissions        UserPermission[]
   audit_logs              AuditLog[]
   notifications           Notification[]
+  machine_assignments     MachineAssignment[]      @relation("EmployeeAssignments")
+  assignments_made        MachineAssignment[]      @relation("AssignedBy")
+  efficiency_thresholds   EfficiencyThreshold[]
+  production_entries      DailyProductionEntry[]
+  efficiency_alerts       EfficiencyAlert[]
 
   @@map("user_profiles")
 }
@@ -99,6 +104,10 @@ model Worksheet {
   user_permissions UserPermission[]
   approval_requests ApprovalRequest[]
   audit_logs       AuditLog[]
+  machine_assignments   MachineAssignment[]
+  efficiency_thresholds EfficiencyThreshold[]
+  production_entries    DailyProductionEntry[]
+  efficiency_alerts     EfficiencyAlert[]
 
   @@map("worksheets")
 }
@@ -142,6 +151,9 @@ model RowData {
   worksheet         Worksheet         @relation(fields: [worksheet_id], references: [id])
   approval_requests ApprovalRequest[]
   audit_logs        AuditLog[]
+  machine_assignments MachineAssignment[]
+  production_entries  DailyProductionEntry[]
+  efficiency_alerts   EfficiencyAlert[]
 
   @@map("row_data")
 }
@@ -244,4 +256,84 @@ model Notification {
   related_approval ApprovalRequest? @relation(fields: [related_approval_id], references: [id])
 
   @@map("notifications")
+}
+
+model MachineAssignment {
+  id           String   @id @default(uuid())
+  employee_id  String
+  row_id       String
+  worksheet_id String
+  assigned_by  String?
+  is_active    Boolean  @default(true)
+  created_at   DateTime @default(now())
+  updated_at   DateTime @updatedAt
+
+  employee  UserProfile  @relation("EmployeeAssignments", fields: [employee_id], references: [id])
+  row       RowData      @relation(fields: [row_id], references: [id])
+  worksheet Worksheet    @relation(fields: [worksheet_id], references: [id])
+  assigner  UserProfile? @relation("AssignedBy", fields: [assigned_by], references: [id])
+
+  @@map("machine_assignments")
+}
+
+model EfficiencyThreshold {
+  id            String   @id @default(uuid())
+  worksheet_id  String
+  process_type  String
+  min_threshold Decimal  @default(85.00) @db.Decimal(5, 2)
+  alert_enabled Boolean  @default(true)
+  created_by    String?
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+
+  worksheet Worksheet    @relation(fields: [worksheet_id], references: [id])
+  creator   UserProfile? @relation(fields: [created_by], references: [id])
+
+  @@unique([worksheet_id, process_type])
+  @@map("efficiency_thresholds")
+}
+
+model DailyProductionEntry {
+  id             String   @id @default(uuid())
+  employee_id    String
+  row_id         String
+  worksheet_id   String
+  entry_date     DateTime @db.Date
+  actual_output  Decimal? @db.Decimal(15, 2)
+  target_output  Decimal? @db.Decimal(15, 2)
+  oe_percentage  Decimal? @db.Decimal(5, 4)
+  shift          String   @default("day")
+  status         String   @default("submitted")
+  sync_status    String   @default("pending")
+  notes          String?
+  created_at     DateTime @default(now())
+  updated_at     DateTime @updatedAt
+
+  employee  UserProfile       @relation(fields: [employee_id], references: [id])
+  row       RowData           @relation(fields: [row_id], references: [id])
+  worksheet Worksheet         @relation(fields: [worksheet_id], references: [id])
+  alerts    EfficiencyAlert[]
+
+  @@unique([employee_id, row_id, entry_date])
+  @@map("daily_production_entries")
+}
+
+model EfficiencyAlert {
+  id              String   @id @default(uuid())
+  entry_id        String?
+  employee_id     String?
+  worksheet_id    String?
+  row_id          String?
+  alert_type      String?
+  threshold_value Decimal? @db.Decimal(5, 2)
+  actual_value    Decimal? @db.Decimal(5, 4)
+  is_resolved     Boolean  @default(false)
+  created_at      DateTime @default(now())
+
+  entry     DailyProductionEntry? @relation(fields: [entry_id], references: [id])
+  employee  UserProfile?          @relation(fields: [employee_id], references: [id])
+  worksheet Worksheet?            @relation(fields: [worksheet_id], references: [id])
+  row       RowData?              @relation(fields: [row_id], references: [id])
+
+  @@map("efficiency_alerts")
 }

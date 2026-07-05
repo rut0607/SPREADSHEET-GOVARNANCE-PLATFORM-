@@ -1,30 +1,40 @@
-import React, { useState } from 'react';
+import React, { useState, lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ProtectedRoute, AdminRoute } from './components/shared/ProtectedRoute';
 import Navbar from './components/shared/Navbar';
 import Sidebar from './components/shared/Sidebar';
-import Login from './pages/auth/Login';
 import LoadingSpinner from './components/shared/LoadingSpinner';
-import AdminDashboard from './pages/admin/AdminDashboard';
-import UsersPage from './pages/admin/Users';
-import SpreadsheetsPage from './pages/admin/Spreadsheets';
-import RolesPage from './pages/admin/Roles';
-import ApprovalsPage from './pages/admin/Approvals';
-import ActivityFeed from './pages/admin/ActivityFeed';
-import AuditLogsPage from './pages/admin/AuditLogs';
-import NotificationsPage from './pages/admin/Notifications';
-import EmployeeDashboard from './pages/employee/EmployeeDashboard';
-import DataViewer from './pages/employee/DataViewer';
-import MyApprovals from './pages/employee/MyApprovals';
-import VersionManagement from './pages/admin/VersionManagement';
-import ColumnConfig from './pages/admin/ColumnConfig';
+import ErrorBoundary from './components/shared/ErrorBoundary';
+import ErrorPage from './components/shared/ErrorPage';
+
+const Login = lazy(() => import('./pages/auth/Login'));
+const AdminDashboard = lazy(() => import('./pages/admin/AdminDashboard'));
+const UsersPage = lazy(() => import('./pages/admin/Users'));
+const SpreadsheetsPage = lazy(() => import('./pages/admin/Spreadsheets'));
+const RolesPage = lazy(() => import('./pages/admin/Roles'));
+const ApprovalsPage = lazy(() => import('./pages/admin/Approvals'));
+const ActivityFeed = lazy(() => import('./pages/admin/ActivityFeed'));
+const AuditLogsPage = lazy(() => import('./pages/admin/AuditLogs'));
+const NotificationsPage = lazy(() => import('./pages/admin/Notifications'));
+const EmployeeDashboard = lazy(() => import('./pages/employee/EmployeeDashboard'));
+const DataViewer = lazy(() => import('./pages/employee/DataViewer'));
+const MyApprovals = lazy(() => import('./pages/employee/MyApprovals'));
+const VersionManagement = lazy(() => import('./pages/admin/VersionManagement'));
+const ColumnConfig = lazy(() => import('./pages/admin/ColumnConfig'));
+const SystemHealth = lazy(() => import('./pages/admin/SystemHealth'));
+const MachineAssignment = lazy(() => import('./pages/admin/MachineAssignment'));
+const EfficiencyDashboard = lazy(() => import('./pages/admin/EfficiencyDashboard'));
+// Prefetched: the busiest, most time-critical screen for employees on mobile data.
+const ProductionEntry = lazy(() => import(/* webpackPrefetch: true */ './pages/employee/ProductionEntry'));
 
 const NotFound = () => (
-  <div className="p-6">
-    <h1 className="text-2xl font-bold">404 - Page Not Found</h1>
-  </div>
+  <ErrorPage
+    code={404}
+    title="Page Not Found"
+    message="The page you're looking for doesn't exist or may have been moved."
+  />
 );
 
 const AppLayout = ({ children }) => {
@@ -44,7 +54,9 @@ const AppLayout = ({ children }) => {
       )}
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       <main className={`pt-14 transition-all duration-300 ${sidebarOpen ? 'lg:ml-64' : 'ml-0'}`}>
-        {children}
+        <ErrorBoundary>
+          {children}
+        </ErrorBoundary>
       </main>
     </div>
   );
@@ -54,6 +66,7 @@ const AppRoutes = () => {
   if (loading) return <LoadingSpinner />;
 
   return (
+    <Suspense fallback={<LoadingSpinner />}>
     <Routes>
       <Route path="/login" element={
         isAuthenticated
@@ -95,6 +108,9 @@ const AppRoutes = () => {
       <Route path="/my-approvals" element={
         <ProtectedRoute><AppLayout><MyApprovals /></AppLayout></ProtectedRoute>
       } />
+      <Route path="/production-entry" element={
+        <ProtectedRoute><AppLayout><ProductionEntry /></AppLayout></ProtectedRoute>
+      } />
 
       <Route path="/" element={
         <Navigate to={isAuthenticated ? (isAdmin ? '/admin' : '/dashboard') : '/login'} replace />
@@ -107,18 +123,31 @@ const AppRoutes = () => {
 <Route path="/admin/columns" element={
   <AdminRoute><AppLayout><ColumnConfig /></AppLayout></AdminRoute>
 } />
+
+      <Route path="/admin/system" element={
+        <AdminRoute><AppLayout><SystemHealth /></AppLayout></AdminRoute>
+      } />
+      <Route path="/admin/machines" element={
+        <AdminRoute><AppLayout><MachineAssignment /></AppLayout></AdminRoute>
+      } />
+      <Route path="/admin/efficiency" element={
+        <AdminRoute><AppLayout><EfficiencyDashboard /></AppLayout></AdminRoute>
+      } />
       <Route path="*" element={<NotFound />} />
     </Routes>
+    </Suspense>
   );
 };
 
 function App() {
   return (
     <BrowserRouter>
-      <AuthProvider>
-        <Toaster position="top-right" />
-        <AppRoutes />
-      </AuthProvider>
+      <ErrorBoundary>
+        <AuthProvider>
+          <Toaster position="top-right" />
+          <AppRoutes />
+        </AuthProvider>
+      </ErrorBoundary>
     </BrowserRouter>
   );
 }

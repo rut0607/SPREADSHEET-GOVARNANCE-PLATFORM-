@@ -20,7 +20,7 @@ const Login = () => {
       toast.success(`Welcome back, ${user.full_name}`);
       navigate(user.is_admin ? '/admin' : '/dashboard');
     } catch (error) {
-      toast.error(error.response?.data?.message || 'Login failed');
+      // error toast handled by the axios response interceptor
     } finally {
       setLoading(false);
     }

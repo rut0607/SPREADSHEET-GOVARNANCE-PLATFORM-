@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import api from '../../services/api';
 import { Settings, Save, Plus, X, Tag } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { ListSkeleton } from '../../components/shared/skeletons';
 
 const ColumnConfig = () => {
   const [sources, setSources] = useState([]);
@@ -20,7 +21,7 @@ const ColumnConfig = () => {
       const res = await api.get('/spreadsheets');
       setSources(res.data.data.sources);
     } catch (error) {
-      toast.error('Failed to fetch spreadsheets');
+      // error toast handled by the axios response interceptor
     } finally {
       setLoading(false);
     }
@@ -35,7 +36,7 @@ const ColumnConfig = () => {
         dropdown_options: col.dropdown_options || []
       })));
     } catch (error) {
-      toast.error('Failed to load columns');
+      // error toast handled by the axios response interceptor
     }
   };
 
@@ -82,7 +83,7 @@ const ColumnConfig = () => {
       ));
       toast.success('Column configuration saved successfully');
     } catch (error) {
-      toast.error('Failed to save configuration');
+      // error toast handled by the axios response interceptor
     } finally {
       setSaving(false);
     }
@@ -90,8 +91,12 @@ const ColumnConfig = () => {
 
   if (loading) {
     return (
-      <div className="p-6 flex items-center justify-center min-h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
+      <div className="p-6 space-y-6">
+        <div>
+          <div className="h-7 w-48 bg-gray-200 rounded animate-pulse" />
+          <div className="h-4 w-64 bg-gray-200 rounded animate-pulse mt-2" />
+        </div>
+        <ListSkeleton items={3} />
       </div>
     );
   }

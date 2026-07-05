@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import api from '../../services/api';
 import { Bell, CheckCheck, Info, CheckCircle, AlertTriangle, XCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { ListSkeleton } from '../../components/shared/skeletons';
 
 const NotificationsPage = () => {
   const [notifications, setNotifications] = useState([]);
@@ -18,7 +19,7 @@ const NotificationsPage = () => {
       setNotifications(res.data.data.notifications);
       setUnreadCount(res.data.data.unread_count);
     } catch (error) {
-      toast.error('Failed to fetch notifications');
+      // error toast handled by the axios response interceptor
     } finally {
       setLoading(false);
     }
@@ -32,7 +33,7 @@ const NotificationsPage = () => {
       );
       setUnreadCount(prev => Math.max(0, prev - 1));
     } catch (error) {
-      toast.error('Failed to mark as read');
+      // error toast handled by the axios response interceptor
     }
   };
 
@@ -43,7 +44,7 @@ const NotificationsPage = () => {
       setUnreadCount(0);
       toast.success('All notifications marked as read');
     } catch (error) {
-      toast.error('Failed to mark all as read');
+      // error toast handled by the axios response interceptor
     }
   };
 
@@ -60,8 +61,12 @@ const NotificationsPage = () => {
 
   if (loading) {
     return (
-      <div className="p-6 flex items-center justify-center min-h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
+      <div className="p-6 space-y-6">
+        <div>
+          <div className="h-7 w-48 bg-gray-200 rounded animate-pulse" />
+          <div className="h-4 w-40 bg-gray-200 rounded animate-pulse mt-2" />
+        </div>
+        <ListSkeleton items={6} withAvatar />
       </div>
     );
   }

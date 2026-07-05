@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import api from '../../services/api';
-import { Database, Search, Filter } from 'lucide-react';
-import toast from 'react-hot-toast';
+import { Database, Search, Filter, Download } from 'lucide-react';
+import { TableSkeleton } from '../../components/shared/skeletons';
 
 const AuditLogsPage = () => {
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
     fetchLogs();
@@ -17,9 +18,28 @@ const AuditLogsPage = () => {
       const res = await api.get('/approvals?limit=100');
       setLogs(res.data.data.approvals);
     } catch (error) {
-      toast.error('Failed to fetch audit logs');
+      // error toast handled by the axios response interceptor
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      const res = await api.get('/audit/export', { responseType: 'blob' });
+      const url = window.URL.createObjectURL(new Blob([res.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `audit-log-export-${new Date().toISOString().slice(0, 10)}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      // error toast handled by the axios response interceptor
+    } finally {
+      setExporting(false);
     }
   };
 
@@ -31,17 +51,31 @@ const AuditLogsPage = () => {
 
   if (loading) {
     return (
-      <div className="p-6 flex items-center justify-center min-h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
+      <div className="p-6 space-y-6">
+        <div>
+          <div className="h-7 w-40 bg-gray-200 rounded animate-pulse" />
+          <div className="h-4 w-72 bg-gray-200 rounded animate-pulse mt-2" />
+        </div>
+        <TableSkeleton rows={8} columns={7} />
       </div>
     );
   }
 
   return (
     <div className="p-6 space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-800">Audit Logs</h1>
-        <p className="text-gray-500 mt-1">Complete history of all changes and requests</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-800">Audit Logs</h1>
+          <p className="text-gray-500 mt-1">Complete history of all changes and requests</p>
+        </div>
+        <button
+          onClick={handleExport}
+          disabled={exporting}
+          className="flex items-center gap-2 bg-primary-600 hover:bg-primary-700 disabled:bg-primary-300 text-white px-4 py-2 rounded-lg transition-colors font-medium"
+        >
+          <Download size={18} />
+          {exporting ? 'Exporting...' : 'Export CSV'}
+        </button>
       </div>
 
       <div className="relative">

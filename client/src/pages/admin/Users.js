@@ -1,7 +1,26 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import api from '../../services/api';
-import { Users, Plus, Edit, Trash2, RotateCcw, X, Check } from 'lucide-react';
+import { Users, Plus, Edit, Trash2, RotateCcw, X, Check, Search, ChevronLeft, ChevronRight } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { TableSkeleton } from '../../components/shared/skeletons';
+import ConfirmDialog from '../../components/shared/ConfirmDialog';
+
+const PAGE_SIZE = 10;
+
+const getPasswordStrength = (password) => {
+  if (!password) return null;
+  const hasNumber = /\d/.test(password);
+  const hasSpecial = /[^A-Za-z0-9]/.test(password);
+  const isLongEnough = password.length >= 8;
+
+  if (!isLongEnough || !hasNumber) {
+    return { label: 'Weak', textClass: 'text-red-600', barClass: 'bg-red-500', width: 'w-1/3' };
+  }
+  if (!hasSpecial) {
+    return { label: 'Medium', textClass: 'text-orange-600', barClass: 'bg-orange-500', width: 'w-2/3' };
+  }
+  return { label: 'Strong', textClass: 'text-green-600', barClass: 'bg-green-500', width: 'w-full' };
+};
 
 const Modal = ({ title, onClose, children }) => (
   <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -30,10 +49,30 @@ const UsersPage = () => {
   });
   const [passwordData, setPasswordData] = useState({ new_password: '', confirm_password: '' });
   const [submitting, setSubmitting] = useState(false);
+  const [confirmDeleteUser, setConfirmDeleteUser] = useState(null);
+  const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
 
   useEffect(() => {
     fetchData();
   }, []);
+
+  useEffect(() => {
+    setPage(1);
+  }, [search]);
+
+  const filteredUsers = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    if (!term) return users;
+    return users.filter(user =>
+      user.full_name?.toLowerCase().includes(term) ||
+      user.email?.toLowerCase().includes(term)
+    );
+  }, [users, search]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredUsers.length / PAGE_SIZE));
+  const paginatedUsers = filteredUsers.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const passwordStrength = getPasswordStrength(formData.password);
 
   const fetchData = async () => {
     try {
@@ -44,7 +83,7 @@ const UsersPage = () => {
       setUsers(usersRes.data.data.users);
       setRoles(rolesRes.data.data.roles);
     } catch (error) {
-      toast.error('Failed to fetch data');
+      // error toast handled by the axios response interceptor
     } finally {
       setLoading(false);
     }
@@ -60,7 +99,7 @@ const UsersPage = () => {
       setFormData({ full_name: '', email: '', password: '', role_id: '', is_admin: false });
       fetchData();
     } catch (error) {
-      toast.error(error.response?.data?.message || 'Failed to create user');
+      // error toast handled by the axios response interceptor
     } finally {
       setSubmitting(false);
     }
@@ -80,7 +119,7 @@ const UsersPage = () => {
       setShowEditModal(false);
       fetchData();
     } catch (error) {
-      toast.error(error.response?.data?.message || 'Failed to update user');
+      // error toast handled by the axios response interceptor
     } finally {
       setSubmitting(false);
     }
@@ -101,20 +140,21 @@ const UsersPage = () => {
       setShowPasswordModal(false);
       setPasswordData({ new_password: '', confirm_password: '' });
     } catch (error) {
-      toast.error(error.response?.data?.message || 'Failed to reset password');
+      // error toast handled by the axios response interceptor
     } finally {
       setSubmitting(false);
     }
   };
 
-  const handleDelete = async (user) => {
-    if (!window.confirm(`Are you sure you want to delete ${user.full_name}?`)) return;
+  const confirmDelete = async () => {
+    const user = confirmDeleteUser;
+    setConfirmDeleteUser(null);
     try {
       await api.delete(`/users/${user.id}`);
       toast.success('User deleted successfully');
       fetchData();
     } catch (error) {
-      toast.error(error.response?.data?.message || 'Failed to delete user');
+      // error toast handled by the axios response interceptor
     }
   };
 
@@ -137,8 +177,14 @@ const UsersPage = () => {
 
   if (loading) {
     return (
-      <div className="p-6 flex items-center justify-center min-h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
+      <div className="p-6 space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="h-7 w-48 bg-gray-200 rounded animate-pulse" />
+            <div className="h-4 w-32 bg-gray-200 rounded animate-pulse mt-2" />
+          </div>
+        </div>
+        <TableSkeleton rows={6} columns={5} />
       </div>
     );
   }
@@ -148,7 +194,9 @@ const UsersPage = () => {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-800">User Management</h1>
-          <p className="text-gray-500 mt-1">{users.length} total users</p>
+          <p className="text-gray-500 mt-1">
+            {search ? `${filteredUsers.length} of ${users.length} users` : `${users.length} total users`}
+          </p>
         </div>
         <button
           onClick={() => setShowCreateModal(true)}
@@ -157,6 +205,17 @@ const UsersPage = () => {
           <Plus size={18} />
           Add User
         </button>
+      </div>
+
+      <div className="relative">
+        <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+        <input
+          type="text"
+          placeholder="Search by name or email..."
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none text-sm"
+        />
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
@@ -171,7 +230,7 @@ const UsersPage = () => {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {users.map(user => (
+            {paginatedUsers.map(user => (
               <tr key={user.id} className="hover:bg-gray-50 transition-colors">
                 <td className="px-6 py-4">
                   <div>
@@ -219,7 +278,7 @@ const UsersPage = () => {
                       <RotateCcw size={16} />
                     </button>
                     <button
-                      onClick={() => handleDelete(user)}
+                      onClick={() => setConfirmDeleteUser(user)}
                       className="p-1.5 hover:bg-red-50 text-red-600 rounded-lg transition-colors"
                       title="Delete user"
                     >
@@ -231,7 +290,36 @@ const UsersPage = () => {
             ))}
           </tbody>
         </table>
+        {filteredUsers.length === 0 && (
+          <div className="p-8 text-center text-gray-500 text-sm">No users found</div>
+        )}
       </div>
+
+      {filteredUsers.length > PAGE_SIZE && (
+        <div className="flex items-center justify-between">
+          <p className="text-sm text-gray-500">
+            Page {page} of {totalPages}
+          </p>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setPage(p => Math.max(1, p - 1))}
+              disabled={page === 1}
+              className="flex items-center gap-1 px-3 py-1.5 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              <ChevronLeft size={16} />
+              Previous
+            </button>
+            <button
+              onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+              disabled={page === totalPages}
+              className="flex items-center gap-1 px-3 py-1.5 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              Next
+              <ChevronRight size={16} />
+            </button>
+          </div>
+        </div>
+      )}
 
       {showCreateModal && (
         <Modal title="Add New User" onClose={() => setShowCreateModal(false)}>
@@ -268,6 +356,16 @@ const UsersPage = () => {
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
                 placeholder="Minimum 8 characters"
               />
+              {passwordStrength && (
+                <div className="mt-1.5">
+                  <div className="h-1.5 w-full bg-gray-100 rounded-full overflow-hidden">
+                    <div className={`h-full rounded-full transition-all ${passwordStrength.barClass} ${passwordStrength.width}`} />
+                  </div>
+                  <p className={`text-xs font-medium mt-1 ${passwordStrength.textClass}`}>
+                    {passwordStrength.label}
+                  </p>
+                </div>
+              )}
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
@@ -424,6 +522,17 @@ const UsersPage = () => {
             </div>
           </form>
         </Modal>
+      )}
+
+      {confirmDeleteUser && (
+        <ConfirmDialog
+          title="Delete User"
+          message={`Are you sure you want to delete ${confirmDeleteUser.full_name}? This action cannot be undone.`}
+          confirmText="Delete"
+          danger
+          onConfirm={confirmDelete}
+          onCancel={() => setConfirmDeleteUser(null)}
+        />
       )}
     </div>
   );

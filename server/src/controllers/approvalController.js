@@ -4,8 +4,17 @@ const createApprovalRequest = async (req, res) => {
   try {
     const { worksheet_id, row_id, column_id, previous_value, requested_value } = req.body;
 
-    if (!worksheet_id || !row_id || !column_id || requested_value === undefined) {
-      return res.status(400).json({ success: false, message: 'Missing required fields' });
+    if (!worksheet_id || !String(worksheet_id).trim()) {
+      return res.status(400).json({ success: false, message: 'worksheet_id is required' });
+    }
+    if (!row_id || !String(row_id).trim()) {
+      return res.status(400).json({ success: false, message: 'row_id is required' });
+    }
+    if (!column_id || !String(column_id).trim()) {
+      return res.status(400).json({ success: false, message: 'column_id is required' });
+    }
+    if (requested_value === undefined || requested_value === null) {
+      return res.status(400).json({ success: false, message: 'requested_value is required' });
     }
 
     const approval = await prisma.approvalRequest.create({

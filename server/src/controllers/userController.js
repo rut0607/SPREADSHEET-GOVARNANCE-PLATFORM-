@@ -29,12 +29,22 @@ const getUserById = async (req, res) => {
   }
 };
 
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 const createUser = async (req, res) => {
   try {
     const { full_name, email, password, role_id, is_admin } = req.body;
-    if (!full_name || !email || !password) {
-      return res.status(400).json({ success: false, message: 'Full name, email and password are required' });
+
+    if (!full_name || !full_name.trim()) {
+      return res.status(400).json({ success: false, message: 'Full name is required' });
     }
+    if (!email || !EMAIL_REGEX.test(email)) {
+      return res.status(400).json({ success: false, message: 'A valid email address is required' });
+    }
+    if (!password || password.length < 8) {
+      return res.status(400).json({ success: false, message: 'Password must be at least 8 characters' });
+    }
+
     const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
       email,
       password,

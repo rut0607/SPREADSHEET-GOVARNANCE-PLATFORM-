@@ -282,6 +282,7 @@ const getServiceAccountEmail = async (req, res) => {
     }
     res.json({ success: true, data: { email } });
   } catch (error) {
+    console.error('Get service account email error:', error);
     res.status(500).json({ success: false, message: 'Failed to get service account email' });
   }
 };

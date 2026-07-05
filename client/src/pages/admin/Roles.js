@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import api from '../../services/api';
 import { Shield, Plus, Edit, Trash2, X, ChevronDown, ChevronUp } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { Skeleton } from '../../components/shared/skeletons';
+import ConfirmDialog from '../../components/shared/ConfirmDialog';
 
 const Modal = ({ title, onClose, children }) => (
   <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -29,6 +31,7 @@ const RolesPage = () => {
   const [permissions, setPermissions] = useState({});
   const [formData, setFormData] = useState({ name: '', description: '' });
   const [submitting, setSubmitting] = useState(false);
+  const [confirmDeleteRole, setConfirmDeleteRole] = useState(null);
 
   useEffect(() => {
     fetchData();
@@ -43,7 +46,7 @@ const RolesPage = () => {
       setRoles(rolesRes.data.data.roles);
       setSources(sourcesRes.data.data.sources);
     } catch (error) {
-      toast.error('Failed to fetch data');
+      // error toast handled by the axios response interceptor
     } finally {
       setLoading(false);
     }
@@ -59,20 +62,21 @@ const RolesPage = () => {
       setFormData({ name: '', description: '' });
       fetchData();
     } catch (error) {
-      toast.error(error.response?.data?.message || 'Failed to create role');
+      // error toast handled by the axios response interceptor
     } finally {
       setSubmitting(false);
     }
   };
 
-  const handleDelete = async (role) => {
-    if (!window.confirm(`Delete role "${role.name}"?`)) return;
+  const confirmDelete = async () => {
+    const role = confirmDeleteRole;
+    setConfirmDeleteRole(null);
     try {
       await api.delete(`/roles/${role.id}`);
       toast.success('Role deleted');
       fetchData();
     } catch (error) {
-      toast.error(error.response?.data?.message || 'Failed to delete role');
+      // error toast handled by the axios response interceptor
     }
   };
 
@@ -117,7 +121,7 @@ const RolesPage = () => {
       setWorksheetData({ columns, worksheet });
       setPermissions(permMap);
     } catch (error) {
-      toast.error('Failed to load permissions');
+      // error toast handled by the axios response interceptor
     }
   };
 
@@ -139,7 +143,7 @@ const RolesPage = () => {
       toast.success('Permissions saved successfully');
       setShowPermissionModal(false);
     } catch (error) {
-      toast.error('Failed to save permissions');
+      // error toast handled by the axios response interceptor
     } finally {
       setSubmitting(false);
     }
@@ -160,8 +164,25 @@ const RolesPage = () => {
 
   if (loading) {
     return (
-      <div className="p-6 flex items-center justify-center min-h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
+      <div className="p-6 space-y-6">
+        <div>
+          <Skeleton className="h-7 w-56" />
+          <Skeleton className="h-4 w-40 mt-2" />
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {Array.from({ length: 6 }, (_, i) => (
+            <div key={i} className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+              <div className="flex items-center gap-3">
+                <Skeleton className="w-10 h-10 rounded-xl flex-shrink-0" />
+                <div className="space-y-2 flex-1">
+                  <Skeleton className="h-4 w-24" />
+                  <Skeleton className="h-3 w-16" />
+                </div>
+              </div>
+              <Skeleton className="h-9 w-full mt-4 rounded-lg" />
+            </div>
+          ))}
+        </div>
       </div>
     );
   }
@@ -202,7 +223,7 @@ const RolesPage = () => {
                 </div>
               </div>
               <button
-                onClick={() => handleDelete(role)}
+                onClick={() => setConfirmDeleteRole(role)}
                 className="p-1.5 hover:bg-red-50 text-red-400 hover:text-red-600 rounded-lg transition-colors"
               >
                 <Trash2 size={15} />
@@ -384,6 +405,17 @@ const RolesPage = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {confirmDeleteRole && (
+        <ConfirmDialog
+          title="Delete Role"
+          message={`Delete role "${confirmDeleteRole.name}"? Users assigned to this role will lose its permissions.`}
+          confirmText="Delete"
+          danger
+          onConfirm={confirmDelete}
+          onCancel={() => setConfirmDeleteRole(null)}
+        />
       )}
     </div>
   );

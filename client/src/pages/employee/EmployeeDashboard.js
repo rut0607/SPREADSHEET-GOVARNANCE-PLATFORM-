@@ -2,8 +2,24 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
+import { StatCardGridSkeleton, ListSkeleton } from '../../components/shared/skeletons';
 import { FileSpreadsheet, CheckSquare, Bell, Clock, CheckCircle, XCircle } from 'lucide-react';
-import toast from 'react-hot-toast';
+
+const MiniStatCard = ({ label, value, icon: Icon, iconBg, iconColor }) => (
+  <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-200">
+    <div className="flex items-center gap-3">
+      <div className={`w-10 h-10 ${iconBg} rounded-xl flex items-center justify-center`}>
+        <Icon size={20} className={iconColor} />
+      </div>
+      <div>
+        <p className="text-xs text-gray-500">{label}</p>
+        <p className="text-2xl font-bold text-gray-800">{value}</p>
+      </div>
+    </div>
+  </div>
+);
+
+const MemoMiniStatCard = React.memo(MiniStatCard);
 
 const EmployeeDashboard = () => {
   const { user } = useAuth();
@@ -40,7 +56,7 @@ const EmployeeDashboard = () => {
       setRecentRequests(approvals.slice(0, 5));
       setNotifications(notifRes.data.data.notifications.slice(0, 5));
     } catch (error) {
-      toast.error('Failed to load dashboard');
+      // error toast handled by the axios response interceptor
     } finally {
       setLoading(false);
     }
@@ -48,8 +64,16 @@ const EmployeeDashboard = () => {
 
   if (loading) {
     return (
-      <div className="p-6 flex items-center justify-center min-h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
+      <div className="p-6 space-y-6">
+        <div>
+          <div className="h-7 w-56 bg-gray-200 rounded animate-pulse" />
+          <div className="h-4 w-72 bg-gray-200 rounded animate-pulse mt-2" />
+        </div>
+        <StatCardGridSkeleton count={4} />
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <ListSkeleton items={4} />
+          <ListSkeleton items={4} />
+        </div>
       </div>
     );
   }
@@ -66,50 +90,10 @@ const EmployeeDashboard = () => {
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-200">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center">
-              <FileSpreadsheet size={20} className="text-blue-600" />
-            </div>
-            <div>
-              <p className="text-xs text-gray-500">Data Sheets</p>
-              <p className="text-2xl font-bold text-gray-800">{stats.totalSheets}</p>
-            </div>
-          </div>
-        </div>
-        <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-200">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-orange-100 rounded-xl flex items-center justify-center">
-              <Clock size={20} className="text-orange-600" />
-            </div>
-            <div>
-              <p className="text-xs text-gray-500">Pending</p>
-              <p className="text-2xl font-bold text-gray-800">{stats.pendingRequests}</p>
-            </div>
-          </div>
-        </div>
-        <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-200">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-green-100 rounded-xl flex items-center justify-center">
-              <CheckCircle size={20} className="text-green-600" />
-            </div>
-            <div>
-              <p className="text-xs text-gray-500">Approved</p>
-              <p className="text-2xl font-bold text-gray-800">{stats.approvedRequests}</p>
-            </div>
-          </div>
-        </div>
-        <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-200">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-red-100 rounded-xl flex items-center justify-center">
-              <XCircle size={20} className="text-red-600" />
-            </div>
-            <div>
-              <p className="text-xs text-gray-500">Rejected</p>
-              <p className="text-2xl font-bold text-gray-800">{stats.rejectedRequests}</p>
-            </div>
-          </div>
-        </div>
+        <MemoMiniStatCard label="Data Sheets" value={stats.totalSheets} icon={FileSpreadsheet} iconBg="bg-blue-100" iconColor="text-blue-600" />
+        <MemoMiniStatCard label="Pending" value={stats.pendingRequests} icon={Clock} iconBg="bg-orange-100" iconColor="text-orange-600" />
+        <MemoMiniStatCard label="Approved" value={stats.approvedRequests} icon={CheckCircle} iconBg="bg-green-100" iconColor="text-green-600" />
+        <MemoMiniStatCard label="Rejected" value={stats.rejectedRequests} icon={XCircle} iconBg="bg-red-100" iconColor="text-red-600" />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

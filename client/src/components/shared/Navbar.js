@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import PropTypes from 'prop-types';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { Bell, LogOut, User, Menu, X, Settings } from 'lucide-react';
@@ -30,10 +31,10 @@ const Navbar = ({ onMenuToggle, sidebarOpen }) => {
         </button>
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 bg-primary-600 rounded-lg flex items-center justify-center flex-shrink-0">
-            <span className="text-white font-bold text-sm">SG</span>
+            <span className="bg-accent-gradient bg-clip-text text-transparent font-bold text-sm">AC</span>
           </div>
           <span className="font-semibold text-gray-800 hidden sm:block text-sm">
-            Spreadsheet Governance
+            Alambre Cables
           </span>
         </div>
       </div>
@@ -97,6 +98,11 @@ const Navbar = ({ onMenuToggle, sidebarOpen }) => {
       </div>
     </nav>
   );
+};
+
+Navbar.propTypes = {
+  onMenuToggle: PropTypes.func.isRequired,
+  sidebarOpen: PropTypes.bool.isRequired
 };
 
 export default Navbar;

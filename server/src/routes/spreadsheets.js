@@ -55,41 +55,7 @@ router.put('/column/:columnId', authenticate, requireAdmin, async (req, res) => 
   }
 });
 
-router.put('/row/:rowId', authenticate, async (req, res) => {
-  try {
-    const { rowId } = req.params;
-    const { data, column_id, previous_value, new_value } = req.body;
-
-    const row = await prisma.rowData.findUnique({ where: { id: rowId } });
-
-    if (!row) {
-      return res.status(404).json({ success: false, message: 'Row not found' });
-    }
-
-    const updated = await prisma.rowData.update({
-      where: { id: rowId },
-      data: { data }
-    });
-
-    await prisma.auditLog.create({
-      data: {
-        user_id: req.user.id,
-        action_type: 'direct_edit',
-        worksheet_id: row.worksheet_id,
-        row_id: rowId,
-        column_id: column_id || null,
-        previous_value: previous_value || null,
-        new_value: new_value || JSON.stringify(data),
-        metadata: { source: 'direct_edit' }
-      }
-    });
-
-    res.json({ success: true, message: 'Row updated successfully', data: { row: updated } });
-  } catch (error) {
-    console.error('Update row error:', error);
-    res.status(500).json({ success: false, message: 'Failed to update row' });
-  }
-});
+router.put('/row/:rowId', authenticate, updateRow);
 
 router.get('/:id', authenticate, getSourceById);
 

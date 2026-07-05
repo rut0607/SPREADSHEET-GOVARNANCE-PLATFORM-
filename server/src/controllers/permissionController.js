@@ -1,4 +1,5 @@
 const prisma = require('../config/prisma');
+const cache = require('../services/cacheService');
 
 const getRolePermissions = async (req, res) => {
   try {
@@ -28,10 +29,8 @@ const setRolePermissions = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Permissions array is required' });
     }
 
-    // Delete existing permissions for this role
     await prisma.rolePermission.deleteMany({ where: { role_id: roleId } });
 
-    // Create new permissions
     if (permissions.length > 0) {
       await prisma.rolePermission.createMany({
         data: permissions.map(p => ({
@@ -44,6 +43,8 @@ const setRolePermissions = async (req, res) => {
         }))
       });
     }
+
+    cache.delPattern('permissions:');
 
     res.json({ success: true, message: 'Role permissions updated successfully' });
   } catch (error) {
@@ -95,6 +96,8 @@ const setUserPermissions = async (req, res) => {
       });
     }
 
+    cache.delPattern('permissions:');
+
     res.json({ success: true, message: 'User permissions updated successfully' });
   } catch (error) {
     console.error('Set user permissions error:', error);
@@ -105,6 +108,11 @@ const setUserPermissions = async (req, res) => {
 const getEffectivePermissions = async (req, res) => {
   try {
     const { userId, worksheetId } = req.params;
+    const cacheKey = `permissions:${userId}:${worksheetId}`;
+    const cached = cache.get(cacheKey);
+    if (cached) {
+      return res.json({ success: true, data: { permissions: cached }, cached: true });
+    }
 
     const user = await prisma.userProfile.findUnique({
       where: { id: userId },
@@ -132,22 +140,20 @@ const getEffectivePermissions = async (req, res) => {
         source: 'admin'
       }));
 
+      cache.set(cacheKey, adminPermissions, 600);
       return res.json({ success: true, data: { permissions: adminPermissions } });
     }
 
-    // Get role permissions
     const rolePermissions = user.role_id ? await prisma.rolePermission.findMany({
       where: { role_id: user.role_id, worksheet_id: worksheetId },
       include: { column: true }
     }) : [];
 
-    // Get user specific overrides
     const userPermissions = await prisma.userPermission.findMany({
       where: { user_id: userId, worksheet_id: worksheetId },
       include: { column: true }
     });
 
-    // Merge permissions - user overrides take priority over role
     const permissionMap = {};
 
     for (const rp of rolePermissions) {
@@ -176,10 +182,10 @@ const getEffectivePermissions = async (req, res) => {
       };
     }
 
-    res.json({
-      success: true,
-      data: { permissions: Object.values(permissionMap) }
-    });
+    const result = Object.values(permissionMap);
+    cache.set(cacheKey, result, 300);
+
+    res.json({ success: true, data: { permissions: result } });
   } catch (error) {
     console.error('Get effective permissions error:', error);
     res.status(500).json({ success: false, message: 'Failed to fetch effective permissions' });

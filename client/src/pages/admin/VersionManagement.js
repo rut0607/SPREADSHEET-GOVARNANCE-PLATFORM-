@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import api from '../../services/api';
 import { History, Upload, RotateCcw, CheckCircle, X, AlertTriangle, BarChart2 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { ListSkeleton } from '../../components/shared/skeletons';
+import ConfirmDialog from '../../components/shared/ConfirmDialog';
 
 const VersionManagement = () => {
   const [sources, setSources] = useState([]);
@@ -15,6 +17,7 @@ const VersionManagement = () => {
   const [uploadData, setUploadData] = useState({ file: null, notes: '' });
   const [uploading, setUploading] = useState(false);
   const [activeTab, setActiveTab] = useState('versions');
+  const [confirmRestoreVersion, setConfirmRestoreVersion] = useState(null);
   const fileInputRef = useRef(null);
 
   useEffect(() => {
@@ -35,7 +38,7 @@ const VersionManagement = () => {
       setSources(sources);
       if (sources.length > 0) setSelectedSource(sources[0]);
     } catch (error) {
-      toast.error('Failed to fetch spreadsheets');
+      // error toast handled by the axios response interceptor
     } finally {
       setLoading(false);
     }
@@ -47,7 +50,7 @@ const VersionManagement = () => {
       const res = await api.get(`/versions/${sourceId}`);
       setVersions(res.data.data.versions);
     } catch (error) {
-      toast.error('Failed to fetch versions');
+      // error toast handled by the axios response interceptor
     } finally {
       setVersionsLoading(false);
     }
@@ -56,7 +59,7 @@ const VersionManagement = () => {
   const fetchReport = async (sourceId) => {
     setReportLoading(true);
     try {
-      const res = await api.get(`/versions/${sourceId}/report/validation`);
+      const res = await api.get(`/versions/${sourceId}/report/validation`, { skipErrorToast: true });
       setReport(res.data.data.report);
     } catch (error) {
       console.error('Report error:', error);
@@ -84,27 +87,32 @@ const VersionManagement = () => {
       setUploadData({ file: null, notes: '' });
       fetchVersions(selectedSource.id);
     } catch (error) {
-      toast.error('Failed to upload version');
+      // error toast handled by the axios response interceptor
     } finally {
       setUploading(false);
     }
   };
 
-  const handleRestore = async (versionId, versionNumber) => {
-    if (!window.confirm(`Restore to version ${versionNumber}? Current data will be replaced.`)) return;
+  const confirmRestore = async () => {
+    const { versionId, versionNumber } = confirmRestoreVersion;
+    setConfirmRestoreVersion(null);
     try {
       await api.put(`/versions/${selectedSource.id}/restore/${versionId}`);
       toast.success(`Restored to version ${versionNumber}`);
       fetchVersions(selectedSource.id);
     } catch (error) {
-      toast.error('Failed to restore version');
+      // error toast handled by the axios response interceptor
     }
   };
 
   if (loading) {
     return (
-      <div className="p-6 flex items-center justify-center min-h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
+      <div className="p-6 space-y-6">
+        <div>
+          <div className="h-7 w-56 bg-gray-200 rounded animate-pulse" />
+          <div className="h-4 w-64 bg-gray-200 rounded animate-pulse mt-2" />
+        </div>
+        <ListSkeleton items={4} />
       </div>
     );
   }
@@ -218,7 +226,7 @@ const VersionManagement = () => {
                       </div>
                       {!version.is_current && (
                         <button
-                          onClick={() => handleRestore(version.id, version.version_number)}
+                          onClick={() => setConfirmRestoreVersion({ versionId: version.id, versionNumber: version.version_number })}
                           className="flex items-center gap-2 px-3 py-1.5 border border-gray-200 hover:border-primary-300 hover:bg-primary-50 text-gray-600 hover:text-primary-600 rounded-lg transition-colors text-sm font-medium"
                         >
                           <RotateCcw size={14} />
@@ -380,6 +388,17 @@ const VersionManagement = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {confirmRestoreVersion && (
+        <ConfirmDialog
+          title="Restore Version"
+          message={`Restore to version ${confirmRestoreVersion.versionNumber}? Current data will be replaced.`}
+          confirmText="Restore"
+          danger
+          onConfirm={confirmRestore}
+          onCancel={() => setConfirmRestoreVersion(null)}
+        />
       )}
     </div>
   );

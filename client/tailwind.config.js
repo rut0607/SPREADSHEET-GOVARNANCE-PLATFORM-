@@ -6,17 +6,25 @@ module.exports = {
     extend: {
       colors: {
         primary: {
-          50: '#eff6ff',
-          100: '#dbeafe',
-          200: '#bfdbfe',
-          300: '#93c5fd',
-          400: '#60a5fa',
-          500: '#3b82f6',
-          600: '#2563eb',
-          700: '#1d4ed8',
-          800: '#1e40af',
-          900: '#1e3a8a',
+          50: '#eef1f8',
+          100: '#dbe1f0',
+          200: '#b3bfe0',
+          300: '#8497cc',
+          400: '#4c5fa0',
+          500: '#2d3f7c',
+          600: '#1B2B5E',
+          700: '#16234c',
+          800: '#111b3b',
+          900: '#0b122a',
+        },
+        accent: {
+          orange: '#FF6B35',
+          pink: '#E91E8C',
+          purple: '#7B2FBE',
         }
+      },
+      backgroundImage: {
+        'accent-gradient': 'linear-gradient(135deg, #FF6B35 0%, #E91E8C 50%, #7B2FBE 100%)',
       }
     },
   },

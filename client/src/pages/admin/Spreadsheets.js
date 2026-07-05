@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import api from '../../services/api';
 import { FileSpreadsheet, Upload, Eye, X, RefreshCw, Link, Copy, Check } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { ListSkeleton, Skeleton } from '../../components/shared/skeletons';
 
 const Modal = ({ title, onClose, children }) => (
   <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -42,7 +43,7 @@ const SpreadsheetsPage = () => {
       const res = await api.get('/spreadsheets');
       setSources(res.data.data.sources);
     } catch (error) {
-      toast.error('Failed to fetch spreadsheets');
+      // error toast handled by the axios response interceptor
     } finally {
       setLoading(false);
     }
@@ -50,7 +51,7 @@ const SpreadsheetsPage = () => {
 
   const fetchServiceEmail = async () => {
     try {
-      const res = await api.get('/google-sheets/service-account');
+      const res = await api.get('/google-sheets/service-account', { skipErrorToast: true });
       setServiceEmail(res.data.data.email);
     } catch (error) {
       console.error('Failed to fetch service account email');
@@ -76,7 +77,7 @@ const SpreadsheetsPage = () => {
       setUploadData({ name: '', file: null });
       fetchSources();
     } catch (error) {
-      toast.error(error.response?.data?.message || 'Upload failed');
+      // error toast handled by the axios response interceptor
     } finally {
       setUploading(false);
     }
@@ -95,7 +96,7 @@ const SpreadsheetsPage = () => {
       setGoogleData({ name: '', url: '' });
       fetchSources();
     } catch (error) {
-      toast.error(error.response?.data?.message || 'Failed to connect Google Sheet');
+      // error toast handled by the axios response interceptor
     } finally {
       setConnecting(false);
     }
@@ -108,7 +109,7 @@ const SpreadsheetsPage = () => {
       toast.success('Synced successfully');
       fetchSources();
     } catch (error) {
-      toast.error('Sync failed');
+      // error toast handled by the axios response interceptor
     } finally {
       setSyncing(null);
     }
@@ -122,8 +123,14 @@ const SpreadsheetsPage = () => {
 
   if (loading) {
     return (
-      <div className="p-6 flex items-center justify-center min-h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
+      <div className="p-6 space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <Skeleton className="h-7 w-40" />
+            <Skeleton className="h-4 w-48 mt-2" />
+          </div>
+        </div>
+        <ListSkeleton items={3} />
       </div>
     );
   }
@@ -396,7 +403,7 @@ const WorksheetViewer = ({ source, worksheet, onClose }) => {
       const res = await api.get(`/spreadsheets/worksheet/${worksheetId}/data`);
       setData(res.data.data);
     } catch (error) {
-      toast.error('Failed to fetch worksheet data');
+      // error toast handled by the axios response interceptor
     } finally {
       setLoading(false);
     }

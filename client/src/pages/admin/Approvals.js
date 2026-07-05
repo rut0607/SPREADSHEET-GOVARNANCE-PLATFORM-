@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import api from '../../services/api';
 import { CheckCircle, XCircle, Clock, Filter } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { ListSkeleton } from '../../components/shared/skeletons';
 
 const ApprovalsPage = () => {
   const [approvals, setApprovals] = useState([]);
@@ -20,7 +21,7 @@ const ApprovalsPage = () => {
       const res = await api.get(`/approvals?status=${filter}`);
       setApprovals(res.data.data.approvals);
     } catch (error) {
-      toast.error('Failed to fetch approvals');
+      // error toast handled by the axios response interceptor
     } finally {
       setLoading(false);
     }
@@ -36,7 +37,7 @@ const ApprovalsPage = () => {
       toast.success(`Request ${status} successfully`);
       fetchApprovals();
     } catch (error) {
-      toast.error('Failed to process approval');
+      // error toast handled by the axios response interceptor
     } finally {
       setSubmitting(null);
     }
@@ -72,9 +73,7 @@ const ApprovalsPage = () => {
       </div>
 
       {loading ? (
-        <div className="flex items-center justify-center min-h-64">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
-        </div>
+        <ListSkeleton items={4} />
       ) : approvals.length === 0 ? (
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
           <CheckCircle size={48} className="text-green-300 mx-auto mb-4" />

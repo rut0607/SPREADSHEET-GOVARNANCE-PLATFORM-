@@ -17,6 +17,7 @@ router.get('/', authenticate, async (req, res) => {
 
     res.json({ success: true, data: { notifications, unread_count: unreadCount } });
   } catch (error) {
+    console.error('Get notifications error:', error);
     res.status(500).json({ success: false, message: 'Failed to fetch notifications' });
   }
 });
@@ -29,6 +30,7 @@ router.put('/:id/read', authenticate, async (req, res) => {
     });
     res.json({ success: true, message: 'Notification marked as read' });
   } catch (error) {
+    console.error('Mark notification read error:', error);
     res.status(500).json({ success: false, message: 'Failed to update notification' });
   }
 });
@@ -41,6 +43,7 @@ router.put('/mark-all-read', authenticate, async (req, res) => {
     });
     res.json({ success: true, message: 'All notifications marked as read' });
   } catch (error) {
+    console.error('Mark all notifications read error:', error);
     res.status(500).json({ success: false, message: 'Failed to update notifications' });
   }
 });

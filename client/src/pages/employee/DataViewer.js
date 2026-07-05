@@ -1,8 +1,91 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { FileSpreadsheet, Search, Send, X, Check, ChevronLeft, ChevronRight } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { TableSkeleton } from '../../components/shared/skeletons';
+
+const getColumnDropdownOptions = (column) => {
+  if (column.data_type === 'dropdown' && column.dropdown_options) {
+    return Array.isArray(column.dropdown_options) ? column.dropdown_options : [];
+  }
+  return [];
+};
+
+const DataRow = React.memo(({
+  row, columns, striped, editingColumnId, editValue, submitting,
+  canEdit, needsApproval, onCellClick, onEditValueChange, onSaveEdit, onCancelEdit
+}) => (
+  <tr className={striped ? 'bg-gray-50' : 'bg-white'}>
+    {columns.map(col => {
+      const isEditing = editingColumnId === col.id;
+      const editable = canEdit(col.id);
+      const approval = needsApproval(col.id);
+      const dropdownOptions = getColumnDropdownOptions(col);
+
+      return (
+        <td
+          key={col.id}
+          className={`px-4 py-2 whitespace-nowrap ${
+            editable
+              ? approval
+                ? 'bg-orange-50 cursor-pointer hover:bg-orange-100'
+                : 'bg-green-50 cursor-pointer hover:bg-green-100'
+              : ''
+          }`}
+          onClick={() => !isEditing && onCellClick(row, col)}
+        >
+          {isEditing ? (
+            <div className="flex items-center gap-1">
+              {dropdownOptions.length > 0 ? (
+                <select
+                  value={editValue}
+                  onChange={e => onEditValueChange(e.target.value)}
+                  className="border border-primary-400 rounded px-2 py-1 text-sm outline-none focus:ring-2 focus:ring-primary-300"
+                  autoFocus
+                >
+                  <option value="">Select...</option>
+                  {dropdownOptions.map(opt => (
+                    <option key={opt} value={opt}>{opt}</option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  type={col.data_type === 'number' || col.data_type === 'currency' ? 'number' : 'text'}
+                  value={editValue}
+                  onChange={e => onEditValueChange(e.target.value)}
+                  className="border border-primary-400 rounded px-2 py-1 text-sm outline-none w-32 focus:ring-2 focus:ring-primary-300"
+                  autoFocus
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') onSaveEdit(row, col, editValue);
+                    if (e.key === 'Escape') onCancelEdit();
+                  }}
+                />
+              )}
+              <button
+                onClick={() => onSaveEdit(row, col, editValue)}
+                disabled={submitting}
+                className="p-1 text-green-600 hover:bg-green-100 rounded"
+              >
+                {approval ? <Send size={14} /> : <Check size={14} />}
+              </button>
+              <button
+                onClick={onCancelEdit}
+                className="p-1 text-red-400 hover:bg-red-50 rounded"
+              >
+                <X size={14} />
+              </button>
+            </div>
+          ) : (
+            <span className="text-gray-700">
+              {row.data[col.column_key] || '—'}
+            </span>
+          )}
+        </td>
+      );
+    })}
+  </tr>
+));
 
 const DataViewer = () => {
   const { user } = useAuth();
@@ -32,7 +115,7 @@ const DataViewer = () => {
         await loadWorksheet(sources[0].worksheets[0], 1);
       }
     } catch (error) {
-      toast.error('Failed to fetch data');
+      // error toast handled by the axios response interceptor
     } finally {
       setLoading(false);
     }
@@ -52,7 +135,7 @@ const DataViewer = () => {
       setWorksheetData(dataRes.data.data);
       setPermissions(permsRes.data.data.permissions);
     } catch (error) {
-      toast.error('Failed to load worksheet');
+      // error toast handled by the axios response interceptor
     } finally {
       setDataLoading(false);
     }
@@ -66,31 +149,31 @@ const DataViewer = () => {
       const res = await api.get(`/spreadsheets/worksheet/${selectedWorksheet.id}/data?page=${newPage}&limit=${limit}`);
       setWorksheetData(res.data.data);
     } catch (error) {
-      toast.error('Failed to load page');
+      // error toast handled by the axios response interceptor
     } finally {
       setDataLoading(false);
     }
   };
 
-  const getPermission = (columnId) => permissions.find(p => p.column_id === columnId);
-  const canEdit = (columnId) => user.is_admin || getPermission(columnId)?.can_edit || false;
-  const needsApproval = (columnId) => !user.is_admin && getPermission(columnId)?.requires_approval || false;
+  const canEdit = useCallback((columnId) => {
+    return user.is_admin || permissions.find(p => p.column_id === columnId)?.can_edit || false;
+  }, [user, permissions]);
 
-  const getColumnDropdownOptions = (column) => {
-    if (column.data_type === 'dropdown' && column.dropdown_options) {
-      return Array.isArray(column.dropdown_options) ? column.dropdown_options : [];
-    }
-    return [];
-  };
+  const needsApproval = useCallback((columnId) => {
+    return !user.is_admin && permissions.find(p => p.column_id === columnId)?.requires_approval || false;
+  }, [user, permissions]);
 
-  const handleCellClick = (row, column) => {
+  const handleCellClick = useCallback((row, column) => {
     if (!canEdit(column.id)) return;
     setEditingCell({ rowId: row.id, columnId: column.id, columnKey: column.column_key });
     setEditValue(row.data[column.column_key] || '');
-  };
+  }, [canEdit]);
 
-  const handleSaveEdit = async (row, column) => {
-    if (editValue === row.data[column.column_key]) {
+  const handleCancelEdit = useCallback(() => setEditingCell(null), []);
+  const handleEditValueChange = useCallback((value) => setEditValue(value), []);
+
+  const handleSaveEdit = useCallback(async (row, column, value) => {
+    if (value === row.data[column.column_key]) {
       setEditingCell(null);
       return;
     }
@@ -103,16 +186,16 @@ const DataViewer = () => {
           row_id: row.id,
           column_id: column.id,
           previous_value: row.data[column.column_key] || '',
-          requested_value: editValue
+          requested_value: value
         });
         toast.success('Change submitted for approval');
       } else {
-        const updatedData = { ...row.data, [column.column_key]: editValue };
+        const updatedData = { ...row.data, [column.column_key]: value };
         await api.put(`/spreadsheets/row/${row.id}`, {
           data: updatedData,
           column_id: column.id,
           previous_value: row.data[column.column_key] || '',
-          new_value: editValue
+          new_value: value
         });
         setWorksheetData(prev => ({
           ...prev,
@@ -124,22 +207,26 @@ const DataViewer = () => {
       }
       setEditingCell(null);
     } catch (error) {
-      toast.error('Failed to save change');
+      // error toast handled by the axios response interceptor
     } finally {
       setSubmitting(false);
     }
-  };
+  }, [needsApproval, selectedWorksheet]);
 
-  const filteredRows = worksheetData?.rows.filter(row =>
+  const filteredRows = useMemo(() => worksheetData?.rows.filter(row =>
     search === '' || Object.values(row.data).some(val =>
       val?.toString().toLowerCase().includes(search.toLowerCase())
     )
-  ) || [];
+  ) || [], [worksheetData, search]);
 
   if (loading) {
     return (
-      <div className="p-6 flex items-center justify-center min-h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
+      <div className="p-6 space-y-4">
+        <div>
+          <div className="h-7 w-40 bg-gray-200 rounded animate-pulse" />
+          <div className="h-4 w-72 bg-gray-200 rounded animate-pulse mt-2" />
+        </div>
+        <TableSkeleton rows={8} columns={5} />
       </div>
     );
   }
@@ -238,77 +325,26 @@ const DataViewer = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {filteredRows.map((row, i) => (
-                  <tr key={row.id} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                    {worksheetData.worksheet.columns.map(col => {
-                      const isEditing = editingCell?.rowId === row.id && editingCell?.columnId === col.id;
-                      const editable = canEdit(col.id);
-                      const approval = needsApproval(col.id);
-                      const dropdownOptions = getColumnDropdownOptions(col);
-
-                      return (
-                        <td
-                          key={col.id}
-                          className={`px-4 py-2 whitespace-nowrap ${
-                            editable
-                              ? approval
-                                ? 'bg-orange-50 cursor-pointer hover:bg-orange-100'
-                                : 'bg-green-50 cursor-pointer hover:bg-green-100'
-                              : ''
-                          }`}
-                          onClick={() => !isEditing && handleCellClick(row, col)}
-                        >
-                          {isEditing ? (
-                            <div className="flex items-center gap-1">
-                              {dropdownOptions.length > 0 ? (
-                                <select
-                                  value={editValue}
-                                  onChange={e => setEditValue(e.target.value)}
-                                  className="border border-primary-400 rounded px-2 py-1 text-sm outline-none focus:ring-2 focus:ring-primary-300"
-                                  autoFocus
-                                >
-                                  <option value="">Select...</option>
-                                  {dropdownOptions.map(opt => (
-                                    <option key={opt} value={opt}>{opt}</option>
-                                  ))}
-                                </select>
-                              ) : (
-                                <input
-                                  type={col.data_type === 'number' || col.data_type === 'currency' ? 'number' : 'text'}
-                                  value={editValue}
-                                  onChange={e => setEditValue(e.target.value)}
-                                  className="border border-primary-400 rounded px-2 py-1 text-sm outline-none w-32 focus:ring-2 focus:ring-primary-300"
-                                  autoFocus
-                                  onKeyDown={e => {
-                                    if (e.key === 'Enter') handleSaveEdit(row, col);
-                                    if (e.key === 'Escape') setEditingCell(null);
-                                  }}
-                                />
-                              )}
-                              <button
-                                onClick={() => handleSaveEdit(row, col)}
-                                disabled={submitting}
-                                className="p-1 text-green-600 hover:bg-green-100 rounded"
-                              >
-                                {approval ? <Send size={14} /> : <Check size={14} />}
-                              </button>
-                              <button
-                                onClick={() => setEditingCell(null)}
-                                className="p-1 text-red-400 hover:bg-red-50 rounded"
-                              >
-                                <X size={14} />
-                              </button>
-                            </div>
-                          ) : (
-                            <span className="text-gray-700">
-                              {row.data[col.column_key] || '—'}
-                            </span>
-                          )}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                ))}
+                {filteredRows.map((row, i) => {
+                  const isEditingThisRow = editingCell?.rowId === row.id;
+                  return (
+                    <DataRow
+                      key={row.id}
+                      row={row}
+                      columns={worksheetData.worksheet.columns}
+                      striped={i % 2 !== 0}
+                      editingColumnId={isEditingThisRow ? editingCell.columnId : null}
+                      editValue={isEditingThisRow ? editValue : ''}
+                      submitting={submitting}
+                      canEdit={canEdit}
+                      needsApproval={needsApproval}
+                      onCellClick={handleCellClick}
+                      onEditValueChange={handleEditValueChange}
+                      onSaveEdit={handleSaveEdit}
+                      onCancelEdit={handleCancelEdit}
+                    />
+                  );
+                })}
               </tbody>
             </table>
           </div>

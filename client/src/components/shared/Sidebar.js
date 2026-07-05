@@ -1,4 +1,5 @@
 import React from 'react';
+import PropTypes from 'prop-types';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import {
@@ -12,7 +13,10 @@ import {
   Database,
   Eye,
   History,
-  Settings
+  Settings,
+  Cpu,
+  TrendingUp,
+  ClipboardList
 } from 'lucide-react';
 
 const adminLinks = [
@@ -22,14 +26,18 @@ const adminLinks = [
   { to: '/admin/spreadsheets', icon: FileSpreadsheet, label: 'Spreadsheets' },
   { to: '/admin/versions', icon: History, label: 'Version Management' },
   { to: '/admin/columns', icon: Settings, label: 'Column Config' },
+  { to: '/admin/machines', icon: Cpu, label: 'Machine Assignment' },
+  { to: '/admin/efficiency', icon: TrendingUp, label: 'Efficiency Dashboard' },
   { to: '/admin/approvals', icon: CheckSquare, label: 'Approvals' },
   { to: '/admin/activity', icon: Activity, label: 'Activity Feed' },
   { to: '/admin/audit', icon: Database, label: 'Audit Logs' },
+  { to: '/admin/system', icon: Activity, label: 'System Health' },
   { to: '/notifications', icon: Bell, label: 'Notifications' },
 ];
 
 const employeeLinks = [
   { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+  { to: '/production-entry', icon: ClipboardList, label: 'Production Entry' },
   { to: '/data', icon: Eye, label: 'View Data' },
   { to: '/my-approvals', icon: CheckSquare, label: 'My Requests' },
   { to: '/notifications', icon: Bell, label: 'Notifications' },
@@ -64,6 +72,11 @@ const Sidebar = ({ isOpen, onClose }) => {
       </nav>
     </aside>
   );
+};
+
+Sidebar.propTypes = {
+  isOpen: PropTypes.bool.isRequired,
+  onClose: PropTypes.func.isRequired
 };
 
 export default Sidebar;
