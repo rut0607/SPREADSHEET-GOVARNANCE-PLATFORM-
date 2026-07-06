@@ -1,14 +1,45 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import PropTypes from 'prop-types';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { Bell, LogOut, User, Menu, X, Settings } from 'lucide-react';
 import toast from 'react-hot-toast';
+import api from '../../services/api';
+
+const dotColors = {
+  green: 'bg-green-500',
+  yellow: 'bg-yellow-500',
+  red: 'bg-red-500'
+};
+
+const getSubmissionDotColor = (summary) => {
+  if (!summary) return null;
+  if (summary.today_submitted) {
+    return summary.today_oe !== null && summary.today_oe > 85 ? 'green' : 'yellow';
+  }
+  return new Date().getHours() >= 10 ? 'red' : null;
+};
 
 const Navbar = ({ onMenuToggle, sidebarOpen }) => {
   const { user, logout, isAdmin } = useAuth();
   const navigate = useNavigate();
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [submissionSummary, setSubmissionSummary] = useState(null);
+
+  useEffect(() => {
+    if (isAdmin) return;
+    let isMounted = true;
+
+    api.get('/production/my-entries', { skipErrorToast: true })
+      .then(res => {
+        if (isMounted) setSubmissionSummary(res.data.data);
+      })
+      .catch(() => {});
+
+    return () => { isMounted = false; };
+  }, [isAdmin]);
+
+  const dotColor = getSubmissionDotColor(submissionSummary);
 
   const handleLogout = async () => {
     try {
@@ -52,8 +83,18 @@ const Navbar = ({ onMenuToggle, sidebarOpen }) => {
             onClick={() => setShowUserMenu(!showUserMenu)}
             className="flex items-center gap-2 p-2 rounded-lg hover:bg-gray-100 transition-colors"
           >
-            <div className="w-8 h-8 bg-primary-100 rounded-full flex items-center justify-center flex-shrink-0">
+            <div className="relative w-8 h-8 bg-primary-100 rounded-full flex items-center justify-center flex-shrink-0">
               <User size={16} className="text-primary-600" />
+              {dotColor && (
+                <span
+                  className={`absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white ${dotColors[dotColor]}`}
+                  title={
+                    dotColor === 'green' ? "Submitted today — great efficiency" :
+                    dotColor === 'yellow' ? 'Submitted today — below target efficiency' :
+                    "You haven't submitted today's production entry"
+                  }
+                />
+              )}
             </div>
             <span className="text-sm font-medium text-gray-700 hidden md:block">
               {user?.full_name}

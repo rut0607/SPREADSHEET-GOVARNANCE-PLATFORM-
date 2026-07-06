@@ -49,6 +49,77 @@ const getEfficiencyStatus = (oePercent, thresholdPercent) => {
   return 'red';
 };
 
+const toDateKey = (date) => date.toISOString().split('T')[0];
+
+const average = (values) => (values.length ? values.reduce((sum, v) => sum + v, 0) / values.length : null);
+
+// Monday-anchored week boundary, computed in UTC to match how entry_date is stored
+// (see submitDailyEntry: `${entry_date}T00:00:00.000Z`) and how the client computes "today".
+const startOfWeekUTC = (date) => {
+  const d = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+  const daysSinceMonday = (d.getUTCDay() + 6) % 7;
+  d.setUTCDate(d.getUTCDate() - daysSinceMonday);
+  return d;
+};
+
+const buildEfficiencySummary = (aggregateEntries) => {
+  const byDay = new Map();
+  for (const e of aggregateEntries) {
+    if (e.oe_percentage === null) continue;
+    const key = toDateKey(e.entry_date);
+    if (!byDay.has(key)) byDay.set(key, []);
+    byDay.get(key).push(parseFloat(e.oe_percentage) * 100);
+  }
+  const dayAverage = (key) => (byDay.has(key) ? average(byDay.get(key)) : null);
+
+  const today = new Date();
+  const todayKey = toDateKey(today);
+  const monday = startOfWeekUTC(today);
+  const lastMonday = new Date(monday);
+  lastMonday.setUTCDate(lastMonday.getUTCDate() - 7);
+  const lastSunday = new Date(monday);
+  lastSunday.setUTCDate(lastSunday.getUTCDate() - 1);
+
+  const weekValues = [];
+  for (let d = new Date(monday); d <= today; d.setUTCDate(d.getUTCDate() + 1)) {
+    const avg = dayAverage(toDateKey(d));
+    if (avg !== null) weekValues.push(avg);
+  }
+
+  const lastWeekValues = [];
+  for (let d = new Date(lastMonday); d <= lastSunday; d.setUTCDate(d.getUTCDate() + 1)) {
+    const avg = dayAverage(toDateKey(d));
+    if (avg !== null) lastWeekValues.push(avg);
+  }
+
+  const sevenDayHistory = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(today);
+    d.setUTCDate(d.getUTCDate() - i);
+    const key = toDateKey(d);
+    sevenDayHistory.push({ date: key, oe_percentage: dayAverage(key), submitted: byDay.has(key) });
+  }
+
+  let streakDays = 0;
+  const cursor = new Date(today);
+  if (!byDay.has(todayKey)) {
+    cursor.setUTCDate(cursor.getUTCDate() - 1);
+  }
+  while (byDay.has(toDateKey(cursor))) {
+    streakDays++;
+    cursor.setUTCDate(cursor.getUTCDate() - 1);
+  }
+
+  return {
+    today_submitted: byDay.has(todayKey),
+    today_oe: dayAverage(todayKey),
+    week_average: average(weekValues),
+    last_week_average: average(lastWeekValues),
+    streak_days: streakDays,
+    seven_day_history: sevenDayHistory
+  };
+};
+
 const syncEntryToGoogleSheets = async (entry, row, worksheetId) => {
   try {
     const worksheet = await prisma.worksheet.findUnique({
@@ -260,11 +331,21 @@ const submitDailyEntry = async (req, res) => {
 
 const getMyEntries = async (req, res) => {
   try {
+    const { employeeId } = req.query;
+    let targetEmployeeId = req.user.id;
+
+    if (employeeId && employeeId !== req.user.id) {
+      if (!req.user.is_admin) {
+        return res.status(403).json({ success: false, message: 'Access denied' });
+      }
+      targetEmployeeId = employeeId;
+    }
+
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
     const entries = await prisma.dailyProductionEntry.findMany({
-      where: { employee_id: req.user.id, entry_date: { gte: thirtyDaysAgo } },
+      where: { employee_id: targetEmployeeId, entry_date: { gte: thirtyDaysAgo } },
       include: {
         row: { select: { id: true, row_identifier: true, data: true } },
         worksheet: { select: { id: true, name: true, display_name: true } }
@@ -272,7 +353,15 @@ const getMyEntries = async (req, res) => {
       orderBy: { entry_date: 'desc' }
     });
 
-    res.json({ success: true, data: { entries } });
+    const ninetyDaysAgo = new Date();
+    ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+
+    const aggregateEntries = await prisma.dailyProductionEntry.findMany({
+      where: { employee_id: targetEmployeeId, entry_date: { gte: ninetyDaysAgo } },
+      select: { entry_date: true, oe_percentage: true }
+    });
+
+    res.json({ success: true, data: { entries, ...buildEfficiencySummary(aggregateEntries) } });
   } catch (error) {
     console.error('Get my entries error:', error);
     res.status(500).json({ success: false, message: 'Failed to fetch entries' });

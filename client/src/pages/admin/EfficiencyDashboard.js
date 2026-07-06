@@ -3,7 +3,7 @@ import api from '../../services/api';
 import toast from 'react-hot-toast';
 import StatCard from '../../components/shared/StatCard';
 import { StatCardGridSkeleton, ListSkeleton } from '../../components/shared/skeletons';
-import { ClipboardList, TrendingUp, AlertTriangle, Bell, Download, CheckCircle2 } from 'lucide-react';
+import { ClipboardList, TrendingUp, AlertTriangle, Bell, Download, CheckCircle2, ChevronDown, ChevronUp, AlertCircle } from 'lucide-react';
 
 const REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 
@@ -14,11 +14,142 @@ const statusStyles = {
   gray: 'bg-gray-100 text-gray-500'
 };
 
+const dotStyles = {
+  green: 'bg-green-500',
+  yellow: 'bg-yellow-500',
+  red: 'bg-red-500',
+  gray: 'bg-gray-300'
+};
+
+const textStyles = {
+  green: 'text-green-600',
+  yellow: 'text-yellow-600',
+  red: 'text-red-600',
+  gray: 'text-gray-400'
+};
+
 const todayISO = () => new Date().toISOString().split('T')[0];
 const daysAgoISO = (days) => {
   const d = new Date();
   d.setDate(d.getDate() - days);
   return d.toISOString().split('T')[0];
+};
+
+// Fixed OE bands used for employee-level (not per-machine-threshold) efficiency displays.
+const getOEBandColor = (oePercent) => {
+  if (oePercent === null || oePercent === undefined) return 'gray';
+  if (oePercent > 85) return 'green';
+  if (oePercent >= 75) return 'yellow';
+  return 'red';
+};
+
+const EmployeeCard = ({ employee, summary, expanded, onToggleExpand }) => {
+  if (!summary) {
+    return (
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+        <div className="h-5 w-32 bg-gray-200 rounded animate-pulse" />
+        <div className="h-10 w-20 bg-gray-200 rounded animate-pulse mt-3" />
+      </div>
+    );
+  }
+
+  if (summary.error) {
+    return (
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+        <p className="font-medium text-gray-800">{employee.full_name}</p>
+        <p className="text-xs text-gray-500">{employee.role?.name || 'No role'}</p>
+        <div className="flex items-center gap-2 mt-3 text-sm text-orange-600">
+          <AlertCircle size={14} />
+          Couldn't load performance data
+        </div>
+      </div>
+    );
+  }
+
+  const { data } = summary;
+  const weekBand = getOEBandColor(data.week_average);
+  const todayBand = data.today_submitted ? getOEBandColor(data.today_oe) : 'gray';
+  const lastFiveDays = data.seven_day_history.slice(-5);
+  const entries = data.entries.slice(0, 30);
+
+  return (
+    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+      <div className="flex items-start justify-between">
+        <div>
+          <p className="font-semibold text-gray-800">{employee.full_name}</p>
+          <p className="text-xs text-gray-500">{employee.role?.name || 'No role'}</p>
+        </div>
+        <p className={`text-2xl font-bold ${textStyles[weekBand]}`}>
+          {data.week_average !== null ? `${data.week_average.toFixed(0)}%` : 'N/A'}
+        </p>
+      </div>
+
+      <div className="mt-3">
+        {data.today_submitted ? (
+          <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${statusStyles[todayBand]}`}>
+            Submitted — {data.today_oe !== null ? `${data.today_oe.toFixed(1)}%` : 'N/A'}
+          </span>
+        ) : (
+          <span className="inline-block px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-500">
+            Not submitted yet
+          </span>
+        )}
+      </div>
+
+      <div className="flex items-center gap-1.5 mt-3">
+        <span className="text-xs text-gray-400 mr-1">5-day trend</span>
+        {lastFiveDays.map(day => (
+          <span
+            key={day.date}
+            title={`${day.date}: ${day.submitted ? `${day.oe_percentage.toFixed(0)}%` : 'No entry'}`}
+            className={`w-2.5 h-2.5 rounded-full ${dotStyles[day.submitted ? getOEBandColor(day.oe_percentage) : 'gray']}`}
+          />
+        ))}
+      </div>
+
+      <button
+        onClick={onToggleExpand}
+        className="flex items-center gap-1 text-xs font-medium text-primary-600 hover:text-primary-700 mt-4"
+      >
+        {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+        {expanded ? 'Hide' : 'View'} last 30 entries
+      </button>
+
+      {expanded && (
+        <div className="mt-3 border-t border-gray-100 pt-3 max-h-64 overflow-y-auto">
+          {entries.length === 0 ? (
+            <p className="text-xs text-gray-400 text-center py-3">No entries in the last 30 days</p>
+          ) : (
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="text-gray-400">
+                  <th className="text-left font-medium py-1">Date</th>
+                  <th className="text-left font-medium py-1">Machine</th>
+                  <th className="text-right font-medium py-1">Output</th>
+                  <th className="text-right font-medium py-1">OE%</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {entries.map(entry => {
+                  const oe = entry.oe_percentage !== null ? parseFloat(entry.oe_percentage) * 100 : null;
+                  return (
+                    <tr key={entry.id}>
+                      <td className="py-1.5 text-gray-600">{entry.entry_date.split('T')[0]}</td>
+                      <td className="py-1.5 text-gray-600">{entry.row?.row_identifier}</td>
+                      <td className="py-1.5 text-right text-gray-600">{entry.actual_output ?? '—'}</td>
+                      <td className={`py-1.5 text-right font-medium ${textStyles[getOEBandColor(oe)]}`}>
+                        {oe !== null ? `${oe.toFixed(1)}%` : '—'}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
+    </div>
+  );
 };
 
 const EfficiencyDashboard = () => {
@@ -28,6 +159,12 @@ const EfficiencyDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
   const [exportRange, setExportRange] = useState({ startDate: daysAgoISO(7), endDate: todayISO() });
+  const [activeTab, setActiveTab] = useState('machines');
+  const [employees, setEmployees] = useState([]);
+  const [employeeSummaries, setEmployeeSummaries] = useState({});
+  const [employeeOverviewLoading, setEmployeeOverviewLoading] = useState(false);
+  const [employeeOverviewLoaded, setEmployeeOverviewLoaded] = useState(false);
+  const [expandedEmployeeId, setExpandedEmployeeId] = useState(null);
 
   const fetchDashboardData = useCallback(async () => {
     try {
@@ -88,6 +225,38 @@ const EfficiencyDashboard = () => {
     const interval = setInterval(fetchDashboardData, REFRESH_INTERVAL_MS);
     return () => clearInterval(interval);
   }, [fetchDashboardData]);
+
+  const fetchEmployeeOverview = useCallback(async () => {
+    if (employeeOverviewLoaded) return;
+    setEmployeeOverviewLoading(true);
+    try {
+      const usersRes = await api.get('/users');
+      const nonAdmins = usersRes.data.data.users.filter(u => !u.is_admin);
+      setEmployees(nonAdmins);
+
+      const results = await Promise.allSettled(
+        nonAdmins.map(emp => api.get('/production/my-entries', { params: { employeeId: emp.id }, skipErrorToast: true }))
+      );
+
+      const summaries = {};
+      results.forEach((result, idx) => {
+        const empId = nonAdmins[idx].id;
+        summaries[empId] = result.status === 'fulfilled'
+          ? { data: result.value.data.data, error: false }
+          : { data: null, error: true };
+      });
+      setEmployeeSummaries(summaries);
+      setEmployeeOverviewLoaded(true);
+    } catch (error) {
+      // error toast handled by the axios response interceptor
+    } finally {
+      setEmployeeOverviewLoading(false);
+    }
+  }, [employeeOverviewLoaded]);
+
+  useEffect(() => {
+    if (activeTab === 'employees') fetchEmployeeOverview();
+  }, [activeTab, fetchEmployeeOverview]);
 
   const handleResolveAlert = async (alertId) => {
     try {
@@ -176,6 +345,26 @@ const EfficiencyDashboard = () => {
         <StatCard title="Unresolved Alerts" value={stats.unresolvedAlerts} icon={Bell} color="bg-orange-500" link="/admin/efficiency" />
       </div>
 
+      <div className="flex gap-1 border-b border-gray-200">
+        <button
+          onClick={() => setActiveTab('machines')}
+          className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+            activeTab === 'machines' ? 'border-primary-600 text-primary-700' : 'border-transparent text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          Machine Status
+        </button>
+        <button
+          onClick={() => setActiveTab('employees')}
+          className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+            activeTab === 'employees' ? 'border-primary-600 text-primary-700' : 'border-transparent text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          Employee Overview
+        </button>
+      </div>
+
+      {activeTab === 'machines' && (
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
         <div className="p-5 border-b border-gray-100">
           <h2 className="font-semibold text-gray-800">Machine Status — Today</h2>
@@ -218,6 +407,29 @@ const EfficiencyDashboard = () => {
           )}
         </div>
       </div>
+      )}
+
+      {activeTab === 'employees' && (
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          {employeeOverviewLoading ? (
+            <ListSkeleton items={4} />
+          ) : employees.length === 0 ? (
+            <div className="col-span-full bg-white rounded-xl border border-gray-200 p-8 text-center text-sm text-gray-500">
+              No employees found
+            </div>
+          ) : (
+            employees.map(emp => (
+              <EmployeeCard
+                key={emp.id}
+                employee={emp}
+                summary={employeeSummaries[emp.id]}
+                expanded={expandedEmployeeId === emp.id}
+                onToggleExpand={() => setExpandedEmployeeId(id => (id === emp.id ? null : emp.id))}
+              />
+            ))
+          )}
+        </div>
+      )}
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-200">
         <div className="p-5 border-b border-gray-100">

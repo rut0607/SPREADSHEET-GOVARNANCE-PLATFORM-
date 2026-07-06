@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import toast from 'react-hot-toast';
-import { WifiOff, Loader2, CheckCircle2, ChevronDown, ChevronUp } from 'lucide-react';
+import { WifiOff, Loader2, CheckCircle2, ChevronDown, ChevronUp, Flame } from 'lucide-react';
 
 const TARGET_KEY_CANDIDATES = ['capacity', 'target_output', 'target', 'daily_capacity'];
 const PROCESS_KEY_CANDIDATES = ['process_type', 'process', 'machine_type'];
@@ -45,6 +45,49 @@ const getGreeting = () => {
   if (hour < 12) return 'Good morning';
   if (hour < 17) return 'Good afternoon';
   return 'Good evening';
+};
+
+const pillStyles = {
+  green: 'bg-green-50 text-green-700',
+  yellow: 'bg-yellow-50 text-yellow-700',
+  red: 'bg-red-50 text-red-700',
+  gray: 'bg-gray-100 text-gray-500'
+};
+
+const StatPill = ({ label, value, band }) => (
+  <div className={`flex-1 rounded-xl px-2 py-2 text-center ${pillStyles[band] || pillStyles.gray}`}>
+    <p className="text-[10px] font-medium uppercase tracking-wide opacity-80">{label}</p>
+    <p className="text-base font-bold mt-0.5">{value}</p>
+  </div>
+);
+
+const EfficiencySummaryBanner = ({ summary }) => {
+  if (!summary) return null;
+
+  const todayBand = summary.today_submitted ? getEfficiencyStatus(summary.today_oe, DEFAULT_THRESHOLD) : 'gray';
+  const weekBand = getEfficiencyStatus(summary.week_average, DEFAULT_THRESHOLD);
+
+  return (
+    <div className="flex gap-2 mt-3">
+      <StatPill
+        label="Today"
+        value={summary.today_submitted ? `${summary.today_oe?.toFixed(0) ?? 'N/A'}%` : '—'}
+        band={todayBand}
+      />
+      <StatPill
+        label="Week"
+        value={summary.week_average !== null ? `${summary.week_average.toFixed(0)}%` : '—'}
+        band={weekBand}
+      />
+      <div className="flex-1 rounded-xl px-2 py-2 text-center bg-orange-50 text-orange-700">
+        <p className="text-[10px] font-medium uppercase tracking-wide opacity-80">Streak</p>
+        <p className="text-base font-bold mt-0.5 flex items-center justify-center gap-1">
+          <Flame size={13} />
+          {summary.streak_days ?? 0}
+        </p>
+      </div>
+    </div>
+  );
 };
 
 const MachineCard = ({ machine, form, onChange, onSubmit, submitting, result }) => {
@@ -155,6 +198,7 @@ const ProductionEntry = () => {
   const [machines, setMachines] = useState([]);
   const [formState, setFormState] = useState({});
   const [results, setResults] = useState({});
+  const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(true);
   const [submittingRowId, setSubmittingRowId] = useState(null);
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
@@ -230,6 +274,12 @@ const ProductionEntry = () => {
 
       setFormState(initialForm);
       setResults(initialResults);
+      setSummary({
+        today_submitted: entriesRes.data.data.today_submitted,
+        today_oe: entriesRes.data.data.today_oe,
+        week_average: entriesRes.data.data.week_average,
+        streak_days: entriesRes.data.data.streak_days
+      });
     } catch (error) {
       // error toast handled by the axios response interceptor
     } finally {
@@ -313,6 +363,7 @@ const ProductionEntry = () => {
         <p className="text-sm text-gray-500 mt-0.5">
           {new Date().toLocaleDateString('en-IN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
         </p>
+        <EfficiencySummaryBanner summary={summary} />
       </div>
 
       <div className="px-4 space-y-4">
