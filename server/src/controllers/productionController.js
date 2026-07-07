@@ -380,14 +380,7 @@ const getDailyReport = async (req, res) => {
       where: { entry_date: targetDate },
       include: {
         employee: { select: { id: true, full_name: true } },
-        row: { select: { id: true, row_identifier: true, data: true } },
-        worksheet: {
-          select: {
-            id: true,
-            name: true,
-            column_definitions: { where: { is_active: true } }
-          }
-        }
+        row: { select: { id: true, row_identifier: true, data: true } }
       },
       orderBy: { created_at: 'desc' }
     });
@@ -395,7 +388,7 @@ const getDailyReport = async (req, res) => {
     const thresholds = await prisma.efficiencyThreshold.findMany();
 
     const report = entries.map(entry => {
-      const processType = findColumnValue(entry.worksheet.column_definitions, entry.row, PROCESS_KEY_CANDIDATES) || 'default';
+      const processType = entry.row.data?.process || 'default';
       const threshold = thresholds.find(t => t.worksheet_id === entry.worksheet_id && t.process_type === processType);
       const thresholdPercent = threshold ? parseFloat(threshold.min_threshold) : DEFAULT_THRESHOLD;
       const oePercent = entry.oe_percentage !== null ? parseFloat(entry.oe_percentage) * 100 : null;
@@ -405,7 +398,7 @@ const getDailyReport = async (req, res) => {
         employee_id: entry.employee.id,
         employee_name: entry.employee.full_name,
         row_id: entry.row_id,
-        machine_name: entry.row.row_identifier,
+        machine_name: entry.row.data?.machine_no || entry.row.row_identifier,
         process_type: processType,
         target_output: entry.target_output,
         actual_output: entry.actual_output,
@@ -439,7 +432,7 @@ const getEfficiencyReport = async (req, res) => {
       },
       include: {
         employee: { select: { id: true, full_name: true } },
-        row: { select: { id: true, row_identifier: true } },
+        row: { select: { id: true, row_identifier: true, data: true } },
         worksheet: { select: { id: true, name: true } }
       },
       orderBy: { entry_date: 'asc' }
@@ -452,7 +445,7 @@ const getEfficiencyReport = async (req, res) => {
       const key = `${entry.row_id}_${entry.employee_id}`;
       if (!groups[key]) {
         groups[key] = {
-          machine_name: entry.row.row_identifier,
+          machine_name: entry.row.data?.machine_no || entry.row.row_identifier,
           employee_name: entry.employee.full_name,
           worksheet_id: entry.worksheet_id,
           entries: []
@@ -550,19 +543,16 @@ const exportExcel = async (req, res) => {
       },
       include: {
         employee: { select: { full_name: true } },
-        row: { select: { row_identifier: true } },
-        worksheet: {
-          select: { column_definitions: { where: { is_active: true } } }
-        }
+        row: { select: { row_identifier: true, data: true } }
       },
       orderBy: { entry_date: 'asc' }
     });
 
     const dailyRows = entries.map(entry => {
-      const processType = findColumnValue(entry.worksheet.column_definitions, entry.row, PROCESS_KEY_CANDIDATES) || 'default';
+      const processType = entry.row.data?.process || 'default';
       return {
         Date: entry.entry_date.toISOString().split('T')[0],
-        Machine: entry.row.row_identifier,
+        Machine: entry.row.data?.machine_no || entry.row.row_identifier,
         Process: processType,
         Employee: entry.employee.full_name,
         Target: entry.target_output ? parseFloat(entry.target_output) : '',
@@ -576,11 +566,12 @@ const exportExcel = async (req, res) => {
 
     const groups = {};
     for (const entry of entries) {
-      const key = `${entry.row.row_identifier}_${entry.employee.full_name}`;
+      const machineName = entry.row.data?.machine_no || entry.row.row_identifier;
+      const key = `${machineName}_${entry.employee.full_name}`;
       if (!groups[key]) {
         groups[key] = {
-          machine: entry.row.row_identifier,
-          process: findColumnValue(entry.worksheet.column_definitions, entry.row, PROCESS_KEY_CANDIDATES) || 'default',
+          machine: machineName,
+          process: entry.row.data?.process || 'default',
           employee: entry.employee.full_name,
           oeValues: [],
           thresholdBreaches: 0

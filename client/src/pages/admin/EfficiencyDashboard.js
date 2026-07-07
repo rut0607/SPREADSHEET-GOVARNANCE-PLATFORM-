@@ -135,7 +135,7 @@ const EmployeeCard = ({ employee, summary, expanded, onToggleExpand }) => {
                   return (
                     <tr key={entry.id}>
                       <td className="py-1.5 text-gray-600">{entry.entry_date.split('T')[0]}</td>
-                      <td className="py-1.5 text-gray-600">{entry.row?.row_identifier}</td>
+                      <td className="py-1.5 text-gray-600">{entry.row?.data?.machine_no || entry.row?.row_identifier}</td>
                       <td className="py-1.5 text-right text-gray-600">{entry.actual_output ?? '—'}</td>
                       <td className={`py-1.5 text-right font-medium ${textStyles[getOEBandColor(oe)]}`}>
                         {oe !== null ? `${oe.toFixed(1)}%` : '—'}
@@ -183,7 +183,8 @@ const EfficiencyDashboard = () => {
           row_id: m.row.id,
           employee_id: group.employee.id,
           employee_name: group.employee.full_name,
-          machine_name: m.row.row_identifier,
+          machine_name: m.row.data?.machine_no || m.row.row_identifier,
+          process_type: m.row.data?.process || '—',
           worksheet_name: m.worksheet.display_name || m.worksheet.name
         }))
       );
@@ -193,7 +194,7 @@ const EfficiencyDashboard = () => {
         return {
           key: `${m.row_id}_${m.employee_id}`,
           machine_name: m.machine_name,
-          process_type: entry?.process_type || '—',
+          process_type: m.process_type,
           employee_name: m.employee_name,
           target: entry?.target_output ?? null,
           actual: entry?.actual_output ?? null,

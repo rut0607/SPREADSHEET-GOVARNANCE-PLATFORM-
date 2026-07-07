@@ -4,20 +4,6 @@ import toast from 'react-hot-toast';
 import { Cpu, UserCircle, X, Plus, Settings2, Save, Search } from 'lucide-react';
 import { ListSkeleton } from '../../components/shared/skeletons';
 
-const findColumnValue = (columns, row, candidates) => {
-  if (!columns || !row) return null;
-  for (const candidate of candidates) {
-    const col = columns.find(c =>
-      c.column_key?.toLowerCase().includes(candidate) ||
-      c.display_name?.toLowerCase().replace(/\s+/g, '_').includes(candidate)
-    );
-    if (col && row.data?.[col.column_key] !== undefined && row.data[col.column_key] !== '') {
-      return row.data[col.column_key];
-    }
-  }
-  return null;
-};
-
 const MachineAssignment = () => {
   const [employees, setEmployees] = useState([]);
   const [allMachines, setAllMachines] = useState([]);
@@ -53,13 +39,12 @@ const MachineAssignment = () => {
       const machinesByWorksheet = await Promise.all(
         worksheets.map(async ws => {
           const res = await api.get(`/spreadsheets/worksheet/${ws.id}/data?limit=1000`);
-          const columns = res.data.data.worksheet.columns;
           return res.data.data.rows.map(row => ({
             row_id: row.id,
             worksheet_id: ws.id,
             worksheet_name: ws.display_name || ws.name,
-            machine_name: row.row_identifier || `Row ${row.row_index + 1}`,
-            process_type: findColumnValue(columns, row, ['process_type', 'process', 'machine_type']) || '—'
+            machine_name: row.data?.machine_no || row.row_identifier || `Row ${row.row_index + 1}`,
+            process_type: row.data?.process || '—'
           }));
         })
       );
@@ -240,11 +225,11 @@ const MachineAssignment = () => {
                     assignedMachines.map(assignment => (
                       <div key={assignment.assignment_id || assignment.id} className="p-4 flex items-center justify-between">
                         <div>
-                          <p className="text-sm font-medium text-gray-800">{assignment.row.row_identifier}</p>
+                          <p className="text-sm font-medium text-gray-800">{assignment.row.data?.machine_no || assignment.row.row_identifier}</p>
                           <p className="text-xs text-gray-500">{assignment.worksheet.display_name || assignment.worksheet.name}</p>
                         </div>
                         <button
-                          onClick={() => handleUnassign(assignment.id, assignment.row.row_identifier)}
+                          onClick={() => handleUnassign(assignment.id, assignment.row.data?.machine_no || assignment.row.row_identifier)}
                           className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                         >
                           <X size={14} />

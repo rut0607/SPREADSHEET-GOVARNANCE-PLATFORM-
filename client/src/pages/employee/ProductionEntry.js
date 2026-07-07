@@ -242,7 +242,7 @@ const ProductionEntry = () => {
       const machineList = assignmentsRes.data.data.assignments.map(a => ({
         row_id: a.row.id,
         worksheet_id: a.worksheet.id,
-        machine_name: a.row.row_identifier || 'Machine',
+        machine_name: a.row.data?.machine_no || a.row.row_identifier || 'Machine',
         target: findColumnValue(a.worksheet.column_definitions, a.row, TARGET_KEY_CANDIDATES),
         process_type: findColumnValue(a.worksheet.column_definitions, a.row, PROCESS_KEY_CANDIDATES) || 'General'
       }));
