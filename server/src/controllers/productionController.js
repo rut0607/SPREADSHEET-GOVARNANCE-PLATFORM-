@@ -1,6 +1,7 @@
 const prisma = require('../config/prisma');
 const XLSX = require('xlsx');
 const { getGoogleSheetsClient } = require('../config/googleSheets');
+const { notifyUser, notifyAdmins } = require('../services/pushService');
 
 const DEFAULT_THRESHOLD = 85.00;
 
@@ -312,6 +313,16 @@ const submitDailyEntry = async (req, res) => {
     });
 
     syncEntryToGoogleSheets(entry, row, worksheet_id).catch(() => {});
+
+    notifyUser(req.user.id, {
+      title: 'Production Entry Recorded',
+      body: `Your output of ${parsedOutput} was recorded with an efficiency of ${oeDisplay}%.`
+    }).catch(() => {});
+
+    notifyAdmins({
+      title: 'New Production Entry',
+      body: `${req.user.full_name} submitted ${parsedOutput} on ${row.row_identifier || 'a machine'} (${oeDisplay}% OE).`
+    }).catch(() => {});
 
     res.status(existingEntry ? 200 : 201).json({
       success: true,

@@ -263,6 +263,7 @@ const SpreadsheetsPage = () => {
                 required
                 value={uploadData.name}
                 onChange={e => setUploadData({ ...uploadData, name: e.target.value })}
+                maxLength={255}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
                 placeholder="e.g. Production Data Q1 2026"
               />
@@ -341,6 +342,7 @@ const SpreadsheetsPage = () => {
                   required
                   value={googleData.name}
                   onChange={e => setGoogleData({ ...googleData, name: e.target.value })}
+                  maxLength={255}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
                   placeholder="e.g. Production Tracker"
                 />
@@ -352,6 +354,7 @@ const SpreadsheetsPage = () => {
                   required
                   value={googleData.url}
                   onChange={e => setGoogleData({ ...googleData, url: e.target.value })}
+                  maxLength={2048}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
                   placeholder="https://docs.google.com/spreadsheets/d/..."
                 />

@@ -3,8 +3,11 @@ const cors = require('cors');
 const dotenv = require('dotenv');
 const compression = require('compression');
 const morgan = require('morgan');
+const helmet = require('helmet');
+const crypto = require('crypto');
 const rateLimit = require('express-rate-limit');
 const { sanitizeInput } = require('./middleware/sanitize');
+const requestLogger = require('./middleware/requestLogger');
 
 dotenv.config();
 
@@ -13,6 +16,13 @@ validateEnv();
 
 const app = express();
 const PORT = process.env.PORT || 8000;
+
+let healthCheckApiKey = process.env.HEALTH_CHECK_API_KEY;
+if (!healthCheckApiKey) {
+  healthCheckApiKey = crypto.randomBytes(24).toString('hex');
+  console.warn(`HEALTH_CHECK_API_KEY not set — generated one for this run: ${healthCheckApiKey}`);
+  console.warn('Set HEALTH_CHECK_API_KEY in your .env to keep this key stable across restarts.');
+}
 
 const generalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -25,18 +35,26 @@ const generalLimiter = rateLimit({
   }
 });
 
+app.use(helmet());
 app.use(compression());
 app.use(morgan('dev'));
+app.use(requestLogger);
 app.use(cors({
   origin: process.env.CLIENT_URL || 'http://localhost:3000',
-  credentials: true
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
 app.use('/api', generalLimiter);
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(sanitizeInput);
 
 app.get('/api/health', (req, res) => {
+  if (req.headers['x-api-key'] !== healthCheckApiKey) {
+    return res.status(401).json({ success: false, message: 'Unauthorized' });
+  }
+
   res.json({
     success: true,
     message: 'Spreadsheet Governance Platform API is running',
@@ -58,6 +76,8 @@ app.use('/api/audit', require('./routes/audit'));
 app.use('/api/system', require('./routes/system'));
 app.use('/api/machines', require('./routes/machines'));
 app.use('/api/production', require('./routes/production'));
+app.use('/api/push', require('./routes/push'));
+app.use('/api/reports', require('./routes/reports'));
 
 app.use((err, req, res, next) => {
   console.error(err.stack);

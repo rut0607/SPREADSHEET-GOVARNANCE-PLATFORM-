@@ -148,6 +148,7 @@ const ApprovalsPage = () => {
                           ...prev,
                           [approval.id]: e.target.value
                         }))}
+                        maxLength={500}
                         className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 outline-none"
                       />
                       <div className="flex gap-3">

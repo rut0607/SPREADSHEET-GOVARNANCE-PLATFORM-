@@ -1,4 +1,5 @@
 const prisma = require('../config/prisma');
+const { notifyUser } = require('../services/pushService');
 
 const createApprovalRequest = async (req, res) => {
   try {
@@ -192,17 +193,24 @@ const reviewApproval = async (req, res) => {
     }
 
     // Notify the requester
+    const notificationMessage = status === 'approved'
+      ? `Your change request for ${approval.column.display_name} has been approved`
+      : `Your change request for ${approval.column.display_name} has been rejected. ${review_notes || ''}`;
+
     await prisma.notification.create({
       data: {
         user_id: approval.requested_by,
         title: status === 'approved' ? 'Change Approved' : 'Change Rejected',
-        message: status === 'approved'
-          ? `Your change request for ${approval.column.display_name} has been approved`
-          : `Your change request for ${approval.column.display_name} has been rejected. ${review_notes || ''}`,
+        message: notificationMessage,
         type: 'approval_result',
         related_approval_id: id
       }
     });
+
+    notifyUser(approval.requested_by, {
+      title: status === 'approved' ? 'Change Approved' : 'Change Rejected',
+      body: notificationMessage
+    }).catch(() => {});
 
     res.json({
       success: true,

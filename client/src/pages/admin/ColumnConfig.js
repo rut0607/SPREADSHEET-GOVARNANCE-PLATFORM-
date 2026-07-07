@@ -157,6 +157,7 @@ const ColumnConfig = () => {
                         type="text"
                         value={col.display_name}
                         onChange={e => updateColumn(col.id, 'display_name', e.target.value)}
+                        maxLength={255}
                         className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 outline-none"
                       />
                     </div>
@@ -244,6 +245,7 @@ const ColumnConfig = () => {
                           value={dropdownInput[col.id] || ''}
                           onChange={e => setDropdownInput(prev => ({ ...prev, [col.id]: e.target.value }))}
                           onKeyDown={e => e.key === 'Enter' && addDropdownOption(col.id)}
+                          maxLength={100}
                           className="flex-1 px-3 py-1.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 outline-none"
                           placeholder="Add option and press Enter"
                         />

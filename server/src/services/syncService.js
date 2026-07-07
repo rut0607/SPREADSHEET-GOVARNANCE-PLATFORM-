@@ -1,6 +1,7 @@
 const cron = require('node-cron');
 const prisma = require('../config/prisma');
 const { getGoogleSheetsClient } = require('../config/googleSheets');
+const { runScheduledWeeklyReport } = require('./weeklyReportService');
 
 const syncGoogleSheet = async (source) => {
   try {
@@ -96,6 +97,13 @@ const startScheduledSync = () => {
   });
 
   console.log('Scheduled sync service started');
+
+  // Every Monday at 6am — generates the report for the week that just ended.
+  cron.schedule('0 6 * * 1', async () => {
+    await runScheduledWeeklyReport();
+  });
+
+  console.log('Weekly report cron scheduled (Mondays 06:00)');
 };
 
 module.exports = { startScheduledSync, syncGoogleSheet };

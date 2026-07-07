@@ -171,6 +171,7 @@ const MachineAssignment = () => {
               <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
               <input
                 type="text"
+                maxLength={100}
                 placeholder="Search employees..."
                 value={employeeSearch}
                 onChange={e => setEmployeeSearch(e.target.value)}
@@ -248,6 +249,7 @@ const MachineAssignment = () => {
                     <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                     <input
                       type="text"
+                      maxLength={100}
                       placeholder="Search machines..."
                       value={machineSearch}
                       onChange={e => setMachineSearch(e.target.value)}
@@ -310,6 +312,7 @@ const MachineAssignment = () => {
               <input
                 type="text"
                 required
+                maxLength={100}
                 value={thresholdForm.process_type}
                 onChange={e => setThresholdForm({ ...thresholdForm, process_type: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 outline-none"

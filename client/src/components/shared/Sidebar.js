@@ -16,7 +16,8 @@ import {
   Settings,
   Cpu,
   TrendingUp,
-  ClipboardList
+  ClipboardList,
+  BarChart2
 } from 'lucide-react';
 
 const adminLinks = [
@@ -28,6 +29,7 @@ const adminLinks = [
   { to: '/admin/columns', icon: Settings, label: 'Column Config' },
   { to: '/admin/machines', icon: Cpu, label: 'Machine Assignment' },
   { to: '/admin/efficiency', icon: TrendingUp, label: 'Efficiency Dashboard' },
+  { to: '/admin/reports', icon: BarChart2, label: 'Weekly Reports' },
   { to: '/admin/approvals', icon: CheckSquare, label: 'Approvals' },
   { to: '/admin/activity', icon: Activity, label: 'Activity Feed' },
   { to: '/admin/audit', icon: Database, label: 'Audit Logs' },
@@ -49,7 +51,9 @@ const Sidebar = ({ isOpen, onClose }) => {
   const links = isAdmin ? adminLinks : employeeLinks;
 
   return (
-    <aside className={`fixed left-0 top-14 h-full bg-white border-r border-gray-200 transition-all duration-300 z-40 ${isOpen ? 'w-64' : 'w-0 overflow-hidden'}`}>
+    <aside className={`fixed left-0 top-14 h-full bg-white border-r border-gray-200 transition-all duration-300 z-40 ${
+      isAdmin ? '' : 'hidden md:block'
+    } ${isOpen ? 'w-64' : 'w-0 overflow-hidden'}`}>
       <nav className="p-4 space-y-1 overflow-y-auto h-full pb-20">
         {links.map(({ to, icon: Icon, label }) => {
           const isActive = location.pathname === to;

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import PropTypes from 'prop-types';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { Bell, LogOut, User, Menu, X, Settings } from 'lucide-react';
+import { Bell, LogOut, User, Menu, X, Settings, Wifi, WifiOff } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../services/api';
 
@@ -20,11 +20,15 @@ const getSubmissionDotColor = (summary) => {
   return new Date().getHours() >= 10 ? 'red' : null;
 };
 
+const SLOW_LATENCY_MS = 800;
+
 const Navbar = ({ onMenuToggle, sidebarOpen }) => {
   const { user, logout, isAdmin } = useAuth();
   const navigate = useNavigate();
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [submissionSummary, setSubmissionSummary] = useState(null);
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [latency, setLatency] = useState(null);
 
   useEffect(() => {
     if (isAdmin) return;
@@ -39,7 +43,25 @@ const Navbar = ({ onMenuToggle, sidebarOpen }) => {
     return () => { isMounted = false; };
   }, [isAdmin]);
 
+  useEffect(() => {
+    if (isAdmin) return;
+
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    const handleLatency = (event) => setLatency(event.detail.ms);
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    window.addEventListener('api:latency', handleLatency);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+      window.removeEventListener('api:latency', handleLatency);
+    };
+  }, [isAdmin]);
+
   const dotColor = getSubmissionDotColor(submissionSummary);
+  const connectionQuality = !isOnline ? 'offline' : (latency !== null && latency > SLOW_LATENCY_MS ? 'slow' : 'good');
 
   const handleLogout = async () => {
     try {
@@ -71,6 +93,21 @@ const Navbar = ({ onMenuToggle, sidebarOpen }) => {
       </div>
 
       <div className="flex items-center gap-1">
+        {!isAdmin && (
+          <div
+            className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium ${
+              connectionQuality === 'offline' ? 'text-red-600' :
+              connectionQuality === 'slow' ? 'text-yellow-600' : 'text-green-600'
+            }`}
+            title={
+              connectionQuality === 'offline' ? 'No internet connection' :
+              connectionQuality === 'slow' ? 'Slow connection detected' : 'Connection is good'
+            }
+          >
+            {connectionQuality === 'offline' ? <WifiOff size={16} /> : <Wifi size={16} />}
+            {connectionQuality === 'offline' && <span className="hidden sm:inline">Offline</span>}
+          </div>
+        )}
         <Link
           to="/notifications"
           className="p-2 rounded-lg hover:bg-gray-100 transition-colors relative"

@@ -3,7 +3,43 @@ import { Link } from 'react-router-dom';
 import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { StatCardGridSkeleton, ListSkeleton } from '../../components/shared/skeletons';
-import { FileSpreadsheet, CheckSquare, Bell, Clock, CheckCircle, XCircle, AlertTriangle } from 'lucide-react';
+import { FileSpreadsheet, CheckSquare, Bell, Clock, CheckCircle, XCircle, AlertTriangle, ClipboardList } from 'lucide-react';
+import usePushNotifications from '../../hooks/usePushNotifications';
+
+const NotificationsToggle = () => {
+  const { isPushEnabled, isSupported, loading, enablePush, disablePush } = usePushNotifications();
+
+  if (!isSupported) return null;
+
+  return (
+    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5 flex items-center justify-between gap-4">
+      <div className="flex items-center gap-3">
+        <div className="w-10 h-10 bg-primary-100 rounded-xl flex items-center justify-center flex-shrink-0">
+          <Bell size={18} className="text-primary-600" />
+        </div>
+        <div>
+          <p className="font-medium text-gray-800 text-sm">Push Notifications</p>
+          <p className="text-xs text-gray-500">Get notified even when the app is closed</p>
+        </div>
+      </div>
+      <button
+        role="switch"
+        aria-checked={isPushEnabled}
+        disabled={loading}
+        onClick={() => (isPushEnabled ? disablePush() : enablePush())}
+        className={`relative w-12 h-7 rounded-full transition-colors flex-shrink-0 disabled:opacity-50 ${
+          isPushEnabled ? 'bg-primary-600' : 'bg-gray-300'
+        }`}
+      >
+        <span
+          className={`absolute top-1 w-5 h-5 rounded-full bg-white transition-transform ${
+            isPushEnabled ? 'translate-x-6' : 'translate-x-1'
+          }`}
+        />
+      </button>
+    </div>
+  );
+};
 
 const MiniStatCard = ({ label, value, icon: Icon, iconBg, iconColor }) => (
   <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-200">
@@ -53,7 +89,7 @@ const EfficiencyRing = ({ percent }) => {
   const offset = circumference - (clamped / 100) * circumference;
 
   return (
-    <div className="relative w-36 h-36 mx-auto">
+    <div className="relative w-44 h-44 sm:w-36 sm:h-36 mx-auto">
       <svg className="w-full h-full -rotate-90" viewBox="0 0 120 120">
         <circle cx="60" cy="60" r={radius} fill="none" stroke="#e5e7eb" strokeWidth="10" />
         <circle
@@ -79,28 +115,30 @@ const EfficiencyRing = ({ percent }) => {
 const SevenDayChart = ({ history }) => {
   const CHART_HEIGHT = 96;
   return (
-    <div className="flex items-end justify-between gap-2" style={{ height: CHART_HEIGHT + 40 }}>
-      {history.map(day => {
-        const band = day.submitted ? getOEBandColor(day.oe_percentage) : 'gray';
-        const barHeight = day.submitted
-          ? Math.max(6, Math.min(100, day.oe_percentage) / 100 * CHART_HEIGHT)
-          : 4;
-        const date = new Date(`${day.date}T00:00:00.000Z`);
-        return (
-          <div key={day.date} className="flex-1 flex flex-col items-center justify-end" style={{ height: CHART_HEIGHT + 40 }}>
-            <span className="text-[11px] font-medium text-gray-600 mb-1">
-              {day.submitted ? `${day.oe_percentage.toFixed(0)}%` : '—'}
-            </span>
-            <div
-              className="w-full rounded-t-md"
-              style={{ height: barHeight, backgroundColor: OE_COLORS[band], minWidth: 12, maxWidth: 32, margin: '0 auto' }}
-            />
-            <span className="text-[11px] text-gray-500 mt-1.5">
-              {date.toLocaleDateString('en-IN', { weekday: 'short', timeZone: 'UTC' })} {date.getUTCDate()}
-            </span>
-          </div>
-        );
-      })}
+    <div className="overflow-x-auto -mx-1 px-1">
+      <div className="flex items-end justify-between sm:justify-between gap-3 min-w-[360px] sm:min-w-0" style={{ height: CHART_HEIGHT + 40 }}>
+        {history.map(day => {
+          const band = day.submitted ? getOEBandColor(day.oe_percentage) : 'gray';
+          const barHeight = day.submitted
+            ? Math.max(6, Math.min(100, day.oe_percentage) / 100 * CHART_HEIGHT)
+            : 4;
+          const date = new Date(`${day.date}T00:00:00.000Z`);
+          return (
+            <div key={day.date} className="flex-1 flex flex-col items-center justify-end flex-shrink-0" style={{ height: CHART_HEIGHT + 40, minWidth: 40 }}>
+              <span className="text-[11px] font-medium text-gray-600 mb-1">
+                {day.submitted ? `${day.oe_percentage.toFixed(0)}%` : '—'}
+              </span>
+              <div
+                className="w-full rounded-t-md"
+                style={{ height: barHeight, backgroundColor: OE_COLORS[band], minWidth: 12, maxWidth: 32, margin: '0 auto' }}
+              />
+              <span className="text-[11px] text-gray-500 mt-1.5">
+                {date.toLocaleDateString('en-IN', { weekday: 'short', timeZone: 'UTC' })} {date.getUTCDate()}
+              </span>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 };
@@ -340,6 +378,8 @@ const EmployeeDashboard = () => {
         </div>
       </div>
 
+      <NotificationsToggle />
+
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
         <h2 className="font-semibold text-gray-800 mb-4">Quick Actions</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -365,6 +405,14 @@ const EmployeeDashboard = () => {
           </Link>
         </div>
       </div>
+
+      <Link
+        to="/production-entry"
+        className="fixed bottom-20 md:bottom-6 right-4 z-30 w-14 h-14 rounded-full bg-primary-600 hover:bg-primary-700 text-white shadow-lg flex items-center justify-center transition-colors"
+        aria-label="Go to production entry"
+      >
+        <ClipboardList size={24} />
+      </Link>
     </div>
   );
 };

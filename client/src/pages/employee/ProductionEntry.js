@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import toast from 'react-hot-toast';
-import { WifiOff, Loader2, CheckCircle2, ChevronDown, ChevronUp, Flame } from 'lucide-react';
+import { WifiOff, Loader2, CheckCircle2, ChevronDown, ChevronUp, Flame, RefreshCw, Send, Edit3 } from 'lucide-react';
 
 const TARGET_KEY_CANDIDATES = ['capacity', 'target_output', 'target', 'daily_capacity'];
 const PROCESS_KEY_CANDIDATES = ['process_type', 'process', 'machine_type'];
@@ -90,11 +90,60 @@ const EfficiencySummaryBanner = ({ summary }) => {
   );
 };
 
+const SWIPE_REVEAL_PX = 84;
+
 const MachineCard = ({ machine, form, onChange, onSubmit, submitting, result }) => {
   const [notesOpen, setNotesOpen] = useState(!!form.notes);
+  const [swipeX, setSwipeX] = useState(0);
+  const outputInputRef = useRef(null);
+  const touchStartX = useRef(null);
+  const dragging = useRef(false);
+
+  const handleTouchStart = (e) => {
+    if (!result) return;
+    touchStartX.current = e.touches[0].clientX;
+    dragging.current = true;
+  };
+
+  const handleTouchMove = (e) => {
+    if (!result || !dragging.current || touchStartX.current === null) return;
+    const delta = e.touches[0].clientX - touchStartX.current;
+    setSwipeX(Math.max(-SWIPE_REVEAL_PX, Math.min(0, delta)));
+  };
+
+  const handleTouchEnd = () => {
+    if (!result) return;
+    dragging.current = false;
+    setSwipeX(prev => (prev < -SWIPE_REVEAL_PX / 2 ? -SWIPE_REVEAL_PX : 0));
+  };
+
+  const handleEditTap = () => {
+    setSwipeX(0);
+    outputInputRef.current?.focus();
+    outputInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  };
 
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-4">
+    <div className="relative rounded-2xl overflow-hidden">
+      {result && (
+        <div className="absolute inset-y-0 right-0 flex items-center" style={{ width: SWIPE_REVEAL_PX }}>
+          <button
+            type="button"
+            onClick={handleEditTap}
+            className="w-full h-full flex flex-col items-center justify-center gap-1 bg-primary-600 text-white text-xs font-medium"
+          >
+            <Edit3 size={18} />
+            Edit
+          </button>
+        </div>
+      )}
+      <div
+        className="relative bg-white rounded-2xl shadow-sm border border-gray-200 p-4"
+        style={{ transform: `translateX(${swipeX}px)`, transition: dragging.current ? 'none' : 'transform 0.2s ease' }}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+      >
       <div className="flex items-start justify-between gap-2">
         <div>
           <h2 className="text-xl font-bold text-gray-900">{machine.machine_name}</h2>
@@ -116,6 +165,7 @@ const MachineCard = ({ machine, form, onChange, onSubmit, submitting, result }) 
       <div className="mt-4">
         <label className="block text-sm font-medium text-gray-700 mb-1.5">Today's Output</label>
         <input
+          ref={outputInputRef}
           type="number"
           inputMode="decimal"
           min="0"
@@ -165,6 +215,7 @@ const MachineCard = ({ machine, form, onChange, onSubmit, submitting, result }) 
             onChange={e => onChange(machine.row_id, { notes: e.target.value })}
             placeholder="Any issues or comments..."
             rows={2}
+            maxLength={500}
             className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-primary-500 outline-none"
           />
         )}
@@ -189,6 +240,7 @@ const MachineCard = ({ machine, form, onChange, onSubmit, submitting, result }) 
           </p>
         </div>
       )}
+      </div>
     </div>
   );
 };
@@ -202,10 +254,22 @@ const ProductionEntry = () => {
   const [loading, setLoading] = useState(true);
   const [submittingRowId, setSubmittingRowId] = useState(null);
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
+  const [dirtyRows, setDirtyRows] = useState(() => new Set());
+  const [submittingAll, setSubmittingAll] = useState(false);
+  const [pullDistance, setPullDistance] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
   const processingQueue = useRef(false);
+  const pullStartY = useRef(null);
 
   const updateForm = (rowId, patch) => {
     setFormState(prev => ({ ...prev, [rowId]: { ...prev[rowId], ...patch } }));
+    if (patch.actual_output !== undefined) {
+      setDirtyRows(prev => new Set(prev).add(rowId));
+    }
+  };
+
+  const vibrateOnSuccess = () => {
+    if (navigator.vibrate) navigator.vibrate(50);
   };
 
   const processQueue = useCallback(async () => {
@@ -220,6 +284,11 @@ const ProductionEntry = () => {
         try {
           const res = await api.post('/production/entry', item.payload);
           setResults(prev => ({ ...prev, [item.payload.row_id]: res.data.data }));
+          setDirtyRows(prev => {
+            const next = new Set(prev);
+            next.delete(item.payload.row_id);
+            return next;
+          });
           toast.success(`Queued entry for ${item.machine_name} submitted successfully`);
         } catch (error) {
           remaining.push(item);
@@ -331,12 +400,58 @@ const ProductionEntry = () => {
     try {
       const res = await api.post('/production/entry', payload);
       setResults(prev => ({ ...prev, [machine.row_id]: res.data.data }));
+      setDirtyRows(prev => {
+        const next = new Set(prev);
+        next.delete(machine.row_id);
+        return next;
+      });
+      vibrateOnSuccess();
       toast.success('Entry submitted successfully');
     } catch (error) {
       // error toast handled by the axios response interceptor
     } finally {
       setSubmittingRowId(null);
     }
+  };
+
+  const pendingMachines = machines.filter(m => dirtyRows.has(m.row_id) && formState[m.row_id]?.actual_output);
+
+  const handleSubmitAll = async () => {
+    setSubmittingAll(true);
+    try {
+      for (const machine of pendingMachines) {
+        // eslint-disable-next-line no-await-in-loop
+        await handleSubmit(machine);
+      }
+      toast.success('All pending entries submitted');
+    } finally {
+      setSubmittingAll(false);
+    }
+  };
+
+  const PULL_THRESHOLD = 70;
+
+  const handlePullStart = (e) => {
+    if (window.scrollY > 0) return;
+    pullStartY.current = e.touches[0].clientY;
+  };
+
+  const handlePullMove = (e) => {
+    if (pullStartY.current === null) return;
+    const delta = e.touches[0].clientY - pullStartY.current;
+    if (delta > 0) {
+      setPullDistance(Math.min(delta, PULL_THRESHOLD * 1.5));
+    }
+  };
+
+  const handlePullEnd = async () => {
+    if (pullDistance >= PULL_THRESHOLD) {
+      setRefreshing(true);
+      await fetchData();
+      setRefreshing(false);
+    }
+    setPullDistance(0);
+    pullStartY.current = null;
   };
 
   if (loading) {
@@ -350,7 +465,21 @@ const ProductionEntry = () => {
   }
 
   return (
-    <div className="max-w-md mx-auto pb-8">
+    <div
+      className="max-w-md mx-auto pb-8 no-pull-refresh scroll-smooth"
+      onTouchStart={handlePullStart}
+      onTouchMove={handlePullMove}
+      onTouchEnd={handlePullEnd}
+    >
+      {(pullDistance > 0 || refreshing) && (
+        <div
+          className="flex items-center justify-center text-primary-600 overflow-hidden transition-all"
+          style={{ height: refreshing ? 40 : pullDistance }}
+        >
+          <RefreshCw size={20} className={refreshing || pullDistance >= PULL_THRESHOLD ? 'animate-spin' : ''} />
+        </div>
+      )}
+
       {isOffline && (
         <div className="bg-orange-500 text-white text-sm font-medium px-4 py-2.5 flex items-center gap-2">
           <WifiOff size={16} />
@@ -385,6 +514,20 @@ const ProductionEntry = () => {
           ))
         )}
       </div>
+
+      {pendingMachines.length > 0 && (
+        <div className="fixed bottom-20 md:bottom-4 left-0 right-0 flex justify-center px-4 z-30 safe-bottom">
+          <button
+            onClick={handleSubmitAll}
+            disabled={submittingAll}
+            className="flex items-center gap-2 bg-primary-600 disabled:bg-primary-300 text-white font-semibold px-5 py-3 rounded-full shadow-lg"
+            style={{ minHeight: 48 }}
+          >
+            {submittingAll ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
+            {submittingAll ? 'Submitting...' : `Submit All (${pendingMachines.length})`}
+          </button>
+        </div>
+      )}
     </div>
   );
 };

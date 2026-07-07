@@ -254,6 +254,7 @@ const RolesPage = () => {
                 required
                 value={formData.name}
                 onChange={e => setFormData({ ...formData, name: e.target.value })}
+                maxLength={100}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
                 placeholder="e.g. Quality Control"
               />
@@ -263,6 +264,7 @@ const RolesPage = () => {
               <textarea
                 value={formData.description}
                 onChange={e => setFormData({ ...formData, description: e.target.value })}
+                maxLength={1000}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
                 placeholder="Describe this role's responsibilities"
                 rows={3}

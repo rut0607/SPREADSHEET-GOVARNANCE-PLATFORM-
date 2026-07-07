@@ -1,0 +1,51 @@
+/* Mobile-specific polish for manufacturing floor employees using phones.
+   Sizing/zoom rules are scoped to the mobile breakpoint so desktop layouts
+   (compact icon buttons, dense tables, etc.) are unaffected. */
+
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button,
+a,
+[role="button"] {
+  touch-action: manipulation;
+}
+
+@media (max-width: 767px) {
+  button,
+  a,
+  input,
+  select,
+  textarea,
+  [role="button"],
+  [role="switch"] {
+    min-height: 44px;
+  }
+
+  input,
+  select,
+  textarea {
+    font-size: 16px; /* prevents iOS Safari from zooming in on focus */
+  }
+}
+
+.no-pull-refresh {
+  overscroll-behavior: contain;
+}
+
+.safe-top {
+  padding-top: env(safe-area-inset-top);
+}
+
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.safe-left {
+  padding-left: env(safe-area-inset-left);
+}
+
+.safe-right {
+  padding-right: env(safe-area-inset-right);
+}

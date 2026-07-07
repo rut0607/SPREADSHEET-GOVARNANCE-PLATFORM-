@@ -211,6 +211,7 @@ const UsersPage = () => {
         <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
         <input
           type="text"
+          maxLength={255}
           placeholder="Search by name or email..."
           value={search}
           onChange={e => setSearch(e.target.value)}
@@ -331,6 +332,7 @@ const UsersPage = () => {
                 required
                 value={formData.full_name}
                 onChange={e => setFormData({ ...formData, full_name: e.target.value })}
+                maxLength={255}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
                 placeholder="Enter full name"
               />
@@ -342,6 +344,7 @@ const UsersPage = () => {
                 required
                 value={formData.email}
                 onChange={e => setFormData({ ...formData, email: e.target.value })}
+                maxLength={255}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
                 placeholder="Enter email"
               />
@@ -353,6 +356,7 @@ const UsersPage = () => {
                 required
                 value={formData.password}
                 onChange={e => setFormData({ ...formData, password: e.target.value })}
+                maxLength={128}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
                 placeholder="Minimum 8 characters"
               />
@@ -420,6 +424,7 @@ const UsersPage = () => {
                 required
                 value={formData.full_name}
                 onChange={e => setFormData({ ...formData, full_name: e.target.value })}
+                maxLength={255}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
               />
             </div>
@@ -489,6 +494,7 @@ const UsersPage = () => {
                 required
                 value={passwordData.new_password}
                 onChange={e => setPasswordData({ ...passwordData, new_password: e.target.value })}
+                maxLength={128}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
                 placeholder="Minimum 8 characters"
               />
@@ -500,6 +506,7 @@ const UsersPage = () => {
                 required
                 value={passwordData.confirm_password}
                 onChange={e => setPasswordData({ ...passwordData, confirm_password: e.target.value })}
+                maxLength={128}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
                 placeholder="Repeat new password"
               />

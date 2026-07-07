@@ -1,25 +1,20 @@
 {
-  "short_name": "React App",
-  "name": "Create React App Sample",
-  "icons": [
-    {
-      "src": "favicon.ico",
-      "sizes": "64x64 32x32 24x24 16x16",
-      "type": "image/x-icon"
-    },
-    {
-      "src": "logo192.png",
-      "type": "image/png",
-      "sizes": "192x192"
-    },
-    {
-      "src": "logo512.png",
-      "type": "image/png",
-      "sizes": "512x512"
-    }
-  ],
-  "start_url": ".",
+  "name": "Alambre Cables Production",
+  "short_name": "AlambreProd",
+  "description": "Production tracking for Alambre Cables",
+  "start_url": "/production-entry",
   "display": "standalone",
-  "theme_color": "#000000",
-  "background_color": "#ffffff"
+  "background_color": "#1B2B5E",
+  "theme_color": "#1B2B5E",
+  "orientation": "portrait",
+  "icons": [
+    { "src": "icon.svg", "type": "image/svg+xml", "sizes": "72x72" },
+    { "src": "icon.svg", "type": "image/svg+xml", "sizes": "96x96" },
+    { "src": "icon.svg", "type": "image/svg+xml", "sizes": "128x128" },
+    { "src": "icon.svg", "type": "image/svg+xml", "sizes": "144x144" },
+    { "src": "icon.svg", "type": "image/svg+xml", "sizes": "152x152" },
+    { "src": "icon.svg", "type": "image/svg+xml", "sizes": "192x192" },
+    { "src": "icon.svg", "type": "image/svg+xml", "sizes": "384x384" },
+    { "src": "icon.svg", "type": "image/svg+xml", "sizes": "512x512", "purpose": "any maskable" }
+  ]
 }

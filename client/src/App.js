@@ -5,9 +5,11 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { ProtectedRoute, AdminRoute } from './components/shared/ProtectedRoute';
 import Navbar from './components/shared/Navbar';
 import Sidebar from './components/shared/Sidebar';
+import BottomNav from './components/shared/BottomNav';
 import LoadingSpinner from './components/shared/LoadingSpinner';
 import ErrorBoundary from './components/shared/ErrorBoundary';
 import ErrorPage from './components/shared/ErrorPage';
+import InstallPrompt from './components/shared/InstallPrompt';
 
 const Login = lazy(() => import('./pages/auth/Login'));
 const AdminDashboard = lazy(() => import('./pages/admin/AdminDashboard'));
@@ -26,6 +28,7 @@ const ColumnConfig = lazy(() => import('./pages/admin/ColumnConfig'));
 const SystemHealth = lazy(() => import('./pages/admin/SystemHealth'));
 const MachineAssignment = lazy(() => import('./pages/admin/MachineAssignment'));
 const EfficiencyDashboard = lazy(() => import('./pages/admin/EfficiencyDashboard'));
+const WeeklyReports = lazy(() => import('./pages/admin/WeeklyReports'));
 // Prefetched: the busiest, most time-critical screen for employees on mobile data.
 const ProductionEntry = lazy(() => import(/* webpackPrefetch: true */ './pages/employee/ProductionEntry'));
 
@@ -39,6 +42,7 @@ const NotFound = () => (
 
 const AppLayout = ({ children }) => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const { isAdmin } = useAuth();
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -53,11 +57,12 @@ const AppLayout = ({ children }) => {
         />
       )}
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-      <main className={`pt-14 transition-all duration-300 ${sidebarOpen ? 'lg:ml-64' : 'ml-0'}`}>
+      <main className={`pt-14 transition-all duration-300 ${sidebarOpen ? 'lg:ml-64' : 'ml-0'} ${!isAdmin ? 'pb-16 md:pb-0' : ''}`}>
         <ErrorBoundary>
           {children}
         </ErrorBoundary>
       </main>
+      {!isAdmin && <BottomNav />}
     </div>
   );
 };
@@ -133,6 +138,9 @@ const AppRoutes = () => {
       <Route path="/admin/efficiency" element={
         <AdminRoute><AppLayout><EfficiencyDashboard /></AppLayout></AdminRoute>
       } />
+      <Route path="/admin/reports" element={
+        <AdminRoute><AppLayout><WeeklyReports /></AppLayout></AdminRoute>
+      } />
       <Route path="*" element={<NotFound />} />
     </Routes>
     </Suspense>
@@ -145,6 +153,7 @@ function App() {
       <ErrorBoundary>
         <AuthProvider>
           <Toaster position="top-right" />
+          <InstallPrompt />
           <AppRoutes />
         </AuthProvider>
       </ErrorBoundary>

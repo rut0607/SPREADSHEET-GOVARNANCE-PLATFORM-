@@ -44,6 +44,7 @@ model UserProfile {
   efficiency_thresholds   EfficiencyThreshold[]
   production_entries      DailyProductionEntry[]
   efficiency_alerts       EfficiencyAlert[]
+  push_subscriptions      PushSubscription[]
 
   @@map("user_profiles")
 }
@@ -336,4 +337,29 @@ model EfficiencyAlert {
   row       RowData?              @relation(fields: [row_id], references: [id])
 
   @@map("efficiency_alerts")
+}
+
+model WeeklyReport {
+  id           String   @id @default(uuid())
+  week_start   DateTime @db.Date
+  week_end     DateTime @db.Date
+  report_data  Json
+  generated_at DateTime @default(now())
+  created_at   DateTime @default(now())
+
+  @@unique([week_start, week_end])
+  @@map("weekly_reports")
+}
+
+model PushSubscription {
+  id           String   @id @default(uuid())
+  user_id      String
+  subscription Json
+  user_agent   String?
+  is_active    Boolean  @default(true)
+  created_at   DateTime @default(now())
+
+  user UserProfile @relation(fields: [user_id], references: [id])
+
+  @@map("push_subscriptions")
 }

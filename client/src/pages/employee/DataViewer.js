@@ -54,6 +54,7 @@ const DataRow = React.memo(({
                   type={col.data_type === 'number' || col.data_type === 'currency' ? 'number' : 'text'}
                   value={editValue}
                   onChange={e => onEditValueChange(e.target.value)}
+                  maxLength={1000}
                   className="border border-primary-400 rounded px-2 py-1 text-sm outline-none w-32 focus:ring-2 focus:ring-primary-300"
                   autoFocus
                   onKeyDown={e => {
@@ -275,6 +276,7 @@ const DataViewer = () => {
           placeholder="Search data..."
           value={search}
           onChange={e => setSearch(e.target.value)}
+          maxLength={255}
           className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none text-sm"
         />
       </div>
