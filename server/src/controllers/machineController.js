@@ -93,7 +93,14 @@ const getEmployeeAssignments = async (req, res) => {
       orderBy: { created_at: 'desc' }
     });
 
-    res.json({ success: true, data: { assignments } });
+    const seenRowIds = new Set();
+    const dedupedAssignments = assignments.filter(assignment => {
+      if (seenRowIds.has(assignment.row_id)) return false;
+      seenRowIds.add(assignment.row_id);
+      return true;
+    });
+
+    res.json({ success: true, data: { assignments: dedupedAssignments } });
   } catch (error) {
     console.error('Get employee assignments error:', error);
     res.status(500).json({ success: false, message: 'Failed to fetch employee assignments' });
@@ -118,9 +125,14 @@ const getAllAssignments = async (req, res) => {
       if (!grouped[key]) {
         grouped[key] = {
           employee: assignment.employee,
-          machines: []
+          machines: [],
+          seenRowIds: new Set()
         };
       }
+
+      if (grouped[key].seenRowIds.has(assignment.row_id)) continue;
+      grouped[key].seenRowIds.add(assignment.row_id);
+
       grouped[key].machines.push({
         assignment_id: assignment.id,
         row: assignment.row,
@@ -129,7 +141,9 @@ const getAllAssignments = async (req, res) => {
       });
     }
 
-    res.json({ success: true, data: { assignments: Object.values(grouped) } });
+    const dedupedAssignments = Object.values(grouped).map(({ employee, machines }) => ({ employee, machines }));
+
+    res.json({ success: true, data: { assignments: dedupedAssignments } });
   } catch (error) {
     console.error('Get all assignments error:', error);
     res.status(500).json({ success: false, message: 'Failed to fetch assignments' });
