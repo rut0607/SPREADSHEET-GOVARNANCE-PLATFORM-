@@ -64,6 +64,59 @@ const startOfWeekUTC = (date) => {
   return d;
 };
 
+// Working week is Monday-Saturday (Sunday off), matching the 6-day week used
+// elsewhere for capacity/target calculations.
+const isWorkingDay = (date) => date.getUTCDay() !== 0;
+
+const workingDaysInRange = (start, end) => {
+  let count = 0;
+  for (const d = new Date(start); d <= end; d.setUTCDate(d.getUTCDate() + 1)) {
+    if (isWorkingDay(d)) count++;
+  }
+  return count;
+};
+
+// Shared by the performance-history endpoints: `points` is [{ date, oe_percentage }],
+// one entry per calendar day in the period (oe_percentage null on days with no data).
+const groupPointsByWeek = (points) => {
+  const weeks = new Map();
+  for (const point of points) {
+    if (point.oe_percentage === null) continue;
+    const monday = startOfWeekUTC(new Date(`${point.date}T00:00:00.000Z`));
+    const key = toDateKey(monday);
+    if (!weeks.has(key)) weeks.set(key, []);
+    weeks.get(key).push(point.oe_percentage);
+  }
+  return Array.from(weeks.entries())
+    .map(([week_start, values]) => ({ week_start, average_oe: parseFloat(average(values).toFixed(2)) }))
+    .sort((a, b) => a.week_start.localeCompare(b.week_start));
+};
+
+const groupPointsByMonth = (points) => {
+  const months = new Map();
+  for (const point of points) {
+    if (point.oe_percentage === null) continue;
+    const monthKey = point.date.slice(0, 7);
+    if (!months.has(monthKey)) months.set(monthKey, []);
+    months.get(monthKey).push(point.oe_percentage);
+  }
+  return Array.from(months.entries())
+    .map(([month, values]) => ({ month, average_oe: parseFloat(average(values).toFixed(2)) }))
+    .sort((a, b) => a.month.localeCompare(b.month));
+};
+
+// First-half-vs-second-half comparison across the non-null points in the period.
+const computeTrendFromPoints = (points) => {
+  const values = points.filter((p) => p.oe_percentage !== null).map((p) => p.oe_percentage);
+  if (values.length < 2) return 'stable';
+  const midpoint = Math.floor(values.length / 2);
+  const firstAvg = average(values.slice(0, midpoint || 1));
+  const secondAvg = average(values.slice(midpoint || 1));
+  if (secondAvg - firstAvg > 2) return 'improving';
+  if (firstAvg - secondAvg > 2) return 'declining';
+  return 'stable';
+};
+
 const buildEfficiencySummary = (aggregateEntries) => {
   const byDay = new Map();
   for (const e of aggregateEntries) {
@@ -423,7 +476,28 @@ const getDailyReport = async (req, res) => {
       };
     });
 
-    res.json({ success: true, data: { date, report } });
+    const downtimeRecords = await prisma.machineDowntime.findMany({
+      where: { downtime_date: targetDate },
+      include: {
+        employee: { select: { id: true, full_name: true } },
+        row: { select: { id: true, row_identifier: true, data: true } }
+      },
+      orderBy: { created_at: 'desc' }
+    });
+
+    const downtime = downtimeRecords.map(d => ({
+      id: d.id,
+      employee_id: d.employee.id,
+      employee_name: d.employee.full_name,
+      row_id: d.row_id,
+      machine_name: d.row.data?.machine_no || d.row.row_identifier,
+      category: d.category,
+      reason: d.category === 'Other' ? (d.custom_reason || 'Other') : d.reason,
+      duration_hours: parseFloat(d.duration_hours),
+      status: d.status
+    }));
+
+    res.json({ success: true, data: { date, report, downtime } });
   } catch (error) {
     if (handlePrismaError(error, res)) return;
     console.error('Get daily report error:', error);
@@ -627,6 +701,330 @@ const exportExcel = async (req, res) => {
   }
 };
 
+const getEmployeePerformanceHistory = async (req, res) => {
+  try {
+    const { employeeId } = req.params;
+
+    if (!req.user.is_admin && req.user.id !== employeeId) {
+      return res.status(403).json({ success: false, message: 'Access denied' });
+    }
+
+    const employee = await prisma.userProfile.findUnique({
+      where: { id: employeeId },
+      select: { id: true, full_name: true, email: true, role: { select: { id: true, name: true } } }
+    });
+
+    if (!employee) {
+      return res.status(404).json({ success: false, message: 'Employee not found' });
+    }
+
+    const days = Math.min(365, Math.max(1, parseInt(req.query.days, 10) || 30));
+    const periodEnd = new Date();
+    periodEnd.setUTCHours(0, 0, 0, 0);
+    const periodStart = new Date(periodEnd);
+    periodStart.setUTCDate(periodStart.getUTCDate() - (days - 1));
+
+    const entries = await prisma.dailyProductionEntry.findMany({
+      where: { employee_id: employeeId, entry_date: { gte: periodStart, lte: periodEnd } },
+      include: { row: { select: { data: true, row_identifier: true } } },
+      orderBy: { entry_date: 'asc' }
+    });
+
+    const thresholds = await prisma.efficiencyThreshold.findMany();
+
+    const byDay = new Map();
+    for (const entry of entries) {
+      if (entry.oe_percentage === null) continue;
+      const key = toDateKey(entry.entry_date);
+      if (!byDay.has(key)) byDay.set(key, []);
+      byDay.get(key).push(parseFloat(entry.oe_percentage) * 100);
+    }
+
+    const dailyPoints = [];
+    for (const d = new Date(periodStart); d <= periodEnd; d.setUTCDate(d.getUTCDate() + 1)) {
+      const key = toDateKey(d);
+      const values = byDay.get(key);
+      dailyPoints.push({ date: key, oe_percentage: values ? parseFloat(average(values).toFixed(2)) : null });
+    }
+
+    const nonNullPoints = dailyPoints.filter((p) => p.oe_percentage !== null);
+    const overallAverage = nonNullPoints.length
+      ? parseFloat(average(nonNullPoints.map((p) => p.oe_percentage)).toFixed(2))
+      : null;
+
+    const bestDay = nonNullPoints.length
+      ? nonNullPoints.reduce((a, b) => (b.oe_percentage > a.oe_percentage ? b : a))
+      : null;
+    const worstDay = nonNullPoints.length
+      ? nonNullPoints.reduce((a, b) => (b.oe_percentage < a.oe_percentage ? b : a))
+      : null;
+
+    const totalWorkingDays = workingDaysInRange(periodStart, periodEnd);
+    const daysSubmittedSet = new Set(entries.map((e) => toDateKey(e.entry_date)));
+    const daysSubmitted = daysSubmittedSet.size;
+    const submissionRate = totalWorkingDays > 0 ? parseFloat(((daysSubmitted / totalWorkingDays) * 100).toFixed(1)) : null;
+
+    const belowThresholdDays = new Set();
+    for (const entry of entries) {
+      if (entry.oe_percentage === null) continue;
+      const processType = entry.row.data?.process || 'default';
+      const threshold = thresholds.find((t) => t.worksheet_id === entry.worksheet_id && t.process_type === processType);
+      const thresholdPercent = threshold ? parseFloat(threshold.min_threshold) : DEFAULT_THRESHOLD;
+      if (parseFloat(entry.oe_percentage) * 100 < thresholdPercent) {
+        belowThresholdDays.add(toDateKey(entry.entry_date));
+      }
+    }
+
+    const downtimeRecords = await prisma.machineDowntime.findMany({
+      where: { employee_id: employeeId, downtime_date: { gte: periodStart, lte: periodEnd } }
+    });
+    const totalDowntimeHours = parseFloat(
+      downtimeRecords.reduce((sum, r) => sum + parseFloat(r.duration_hours), 0).toFixed(2)
+    );
+    const reasonCounts = new Map();
+    for (const r of downtimeRecords) {
+      const label = r.category === 'Other' ? (r.custom_reason || 'Other') : r.reason;
+      reasonCounts.set(label, (reasonCounts.get(label) || 0) + 1);
+    }
+    const mostCommonDowntimeReason = Array.from(reasonCounts.entries()).sort((a, b) => b[1] - a[1])[0]?.[0] || null;
+
+    const categoryHours = new Map();
+    for (const r of downtimeRecords) {
+      categoryHours.set(r.category, (categoryHours.get(r.category) || 0) + parseFloat(r.duration_hours));
+    }
+    const downtimeByCategory = Array.from(categoryHours.entries())
+      .map(([category, hours]) => ({ category, hours: parseFloat(hours.toFixed(2)) }))
+      .sort((a, b) => b.hours - a.hours);
+
+    const plantEntries = await prisma.dailyProductionEntry.findMany({
+      where: { entry_date: { gte: periodStart, lte: periodEnd }, oe_percentage: { not: null } },
+      select: { oe_percentage: true }
+    });
+    const plantValues = plantEntries.map((e) => parseFloat(e.oe_percentage) * 100);
+    const plantAverage = plantValues.length ? parseFloat(average(plantValues).toFixed(2)) : null;
+
+    res.json({
+      success: true,
+      data: {
+        employee,
+        days,
+        period: { start: toDateKey(periodStart), end: toDateKey(periodEnd) },
+        daily_oe: dailyPoints,
+        weekly_averages: groupPointsByWeek(dailyPoints),
+        monthly_averages: groupPointsByMonth(dailyPoints),
+        overall_average_oe: overallAverage,
+        trend: computeTrendFromPoints(dailyPoints),
+        best_day: bestDay,
+        worst_day: worstDay,
+        days_submitted: daysSubmitted,
+        total_working_days: totalWorkingDays,
+        submission_rate: submissionRate,
+        total_downtime_hours: totalDowntimeHours,
+        most_common_downtime_reason: mostCommonDowntimeReason,
+        downtime_by_category: downtimeByCategory,
+        days_below_threshold: belowThresholdDays.size,
+        plant_average_oe: plantAverage,
+        comparison_to_plant: (overallAverage !== null && plantAverage !== null)
+          ? parseFloat((overallAverage - plantAverage).toFixed(2))
+          : null
+      }
+    });
+  } catch (error) {
+    if (handlePrismaError(error, res)) return;
+    console.error('Get employee performance history error:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch employee performance history' });
+  }
+};
+
+const getPlantPerformanceHistory = async (req, res) => {
+  try {
+    const days = Math.min(365, Math.max(1, parseInt(req.query.days, 10) || 30));
+    const periodEnd = new Date();
+    periodEnd.setUTCHours(0, 0, 0, 0);
+    const periodStart = new Date(periodEnd);
+    periodStart.setUTCDate(periodStart.getUTCDate() - (days - 1));
+
+    const entries = await prisma.dailyProductionEntry.findMany({
+      where: { entry_date: { gte: periodStart, lte: periodEnd } },
+      include: { row: { select: { data: true, row_identifier: true } } },
+      orderBy: { entry_date: 'asc' }
+    });
+
+    const byDay = new Map();
+    const byMachine = new Map();
+
+    for (const entry of entries) {
+      if (entry.oe_percentage === null) continue;
+      const oe = parseFloat(entry.oe_percentage) * 100;
+
+      const dayKey = toDateKey(entry.entry_date);
+      if (!byDay.has(dayKey)) byDay.set(dayKey, []);
+      byDay.get(dayKey).push(oe);
+
+      const machineName = entry.row.data?.machine_no || entry.row.row_identifier;
+      if (!byMachine.has(machineName)) byMachine.set(machineName, []);
+      byMachine.get(machineName).push(oe);
+    }
+
+    const dailyPoints = [];
+    for (const d = new Date(periodStart); d <= periodEnd; d.setUTCDate(d.getUTCDate() + 1)) {
+      const key = toDateKey(d);
+      const values = byDay.get(key);
+      dailyPoints.push({ date: key, oe_percentage: values ? parseFloat(average(values).toFixed(2)) : null });
+    }
+
+    const machineAverages = Array.from(byMachine.entries())
+      .map(([machine_name, values]) => ({
+        machine_name,
+        average_oe: parseFloat(average(values).toFixed(2)),
+        entries: values.length
+      }))
+      .sort((a, b) => b.average_oe - a.average_oe);
+
+    const allValues = entries.filter((e) => e.oe_percentage !== null).map((e) => parseFloat(e.oe_percentage) * 100);
+    const overallAverage = allValues.length ? parseFloat(average(allValues).toFixed(2)) : null;
+
+    res.json({
+      success: true,
+      data: {
+        days,
+        period: { start: toDateKey(periodStart), end: toDateKey(periodEnd) },
+        daily_oe: dailyPoints,
+        weekly_averages: groupPointsByWeek(dailyPoints),
+        machine_averages: machineAverages,
+        best_machine: machineAverages[0] || null,
+        worst_machine: machineAverages.length ? machineAverages[machineAverages.length - 1] : null,
+        overall_average_oe: overallAverage,
+        trend: computeTrendFromPoints(dailyPoints)
+      }
+    });
+  } catch (error) {
+    if (handlePrismaError(error, res)) return;
+    console.error('Get plant performance history error:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch plant performance history' });
+  }
+};
+
+const getTargetVsActualTrend = async (req, res) => {
+  try {
+    const weeksParam = Math.min(12, Math.max(1, parseInt(req.query.weeks, 10) || 4));
+
+    const assignments = await prisma.machineAssignment.findMany({
+      where: { is_active: true },
+      include: {
+        employee: { select: { id: true, full_name: true } },
+        row: { select: { id: true, row_identifier: true, data: true } },
+        worksheet: { select: { id: true, name: true, display_name: true, column_definitions: { where: { is_active: true } } } }
+      }
+    });
+
+    const machines = [];
+    const seenRowIds = new Set();
+    for (const a of assignments) {
+      if (seenRowIds.has(a.row_id)) continue;
+      seenRowIds.add(a.row_id);
+      const targetRaw = findColumnValue(a.worksheet.column_definitions, a.row, TARGET_KEY_CANDIDATES);
+      const processType = findColumnValue(a.worksheet.column_definitions, a.row, PROCESS_KEY_CANDIDATES) || 'default';
+      machines.push({
+        row_id: a.row_id,
+        machine_name: a.row.data?.machine_no || a.row.row_identifier,
+        process_type: processType,
+        employee_name: a.employee.full_name,
+        daily_capacity: targetRaw !== null ? parseFloat(targetRaw) : null
+      });
+    }
+
+    // Working week is Monday-Saturday (6 days), so each week's window is [Monday, Saturday].
+    const currentWeekStart = startOfWeekUTC(new Date());
+    const weeks = [];
+    for (let i = weeksParam - 1; i >= 0; i--) {
+      const start = new Date(currentWeekStart);
+      start.setUTCDate(start.getUTCDate() - i * 7);
+      const end = new Date(start);
+      end.setUTCDate(start.getUTCDate() + 5);
+      weeks.push({ week_start: toDateKey(start), week_end: toDateKey(end), start, end });
+    }
+
+    const entries = machines.length
+      ? await prisma.dailyProductionEntry.findMany({
+          where: { entry_date: { gte: weeks[0].start, lte: weeks[weeks.length - 1].end } },
+          select: { row_id: true, entry_date: true, actual_output: true }
+        })
+      : [];
+
+    const weekIndexByStart = new Map(weeks.map((w, idx) => [w.week_start, idx]));
+    const actualByWeekRow = weeks.map(() => new Map());
+    for (const entry of entries) {
+      const weekStartKey = toDateKey(startOfWeekUTC(entry.entry_date));
+      const idx = weekIndexByStart.get(weekStartKey);
+      if (idx === undefined) continue;
+      const bucket = actualByWeekRow[idx];
+      bucket.set(entry.row_id, (bucket.get(entry.row_id) || 0) + parseFloat(entry.actual_output));
+    }
+
+    const workingDaysPerWeek = workingDaysInRange(weeks[0].start, weeks[0].end);
+
+    const weeklyResults = weeks.map((w, idx) => {
+      const machineBreakdown = machines.map(m => {
+        const actual = actualByWeekRow[idx].get(m.row_id) || 0;
+        const target = m.daily_capacity !== null ? parseFloat((m.daily_capacity * workingDaysPerWeek).toFixed(2)) : null;
+        const oePercent = (target && target > 0) ? parseFloat(((actual / target) * 100).toFixed(2)) : null;
+        return {
+          row_id: m.row_id,
+          machine_name: m.machine_name,
+          process_type: m.process_type,
+          employee_name: m.employee_name,
+          target,
+          actual: parseFloat(actual.toFixed(2)),
+          oe_percentage: oePercent
+        };
+      });
+
+      const totalTarget = parseFloat(machineBreakdown.reduce((s, m) => s + (m.target || 0), 0).toFixed(2));
+      const totalActual = parseFloat(machineBreakdown.reduce((s, m) => s + m.actual, 0).toFixed(2));
+      const plantOE = totalTarget > 0 ? parseFloat(((totalActual / totalTarget) * 100).toFixed(2)) : null;
+      const gap = parseFloat((totalTarget - totalActual).toFixed(2));
+
+      return {
+        week_start: w.week_start,
+        week_end: w.week_end,
+        total_target: totalTarget,
+        total_actual: totalActual,
+        plant_oe_percentage: plantOE,
+        gap,
+        machines: machineBreakdown
+      };
+    });
+
+    weeklyResults.forEach((week, idx) => {
+      if (idx === 0) {
+        week.oe_change_vs_previous_week = null;
+        week.gap_trend = null;
+        return;
+      }
+      const prev = weeklyResults[idx - 1];
+      week.oe_change_vs_previous_week = (week.plant_oe_percentage !== null && prev.plant_oe_percentage !== null)
+        ? parseFloat((week.plant_oe_percentage - prev.plant_oe_percentage).toFixed(2))
+        : null;
+      if (Math.abs(week.gap) > Math.abs(prev.gap)) week.gap_trend = 'widening';
+      else if (Math.abs(week.gap) < Math.abs(prev.gap)) week.gap_trend = 'narrowing';
+      else week.gap_trend = 'unchanged';
+    });
+
+    res.json({
+      success: true,
+      data: {
+        weeks: weeksParam,
+        weekly: weeklyResults
+      }
+    });
+  } catch (error) {
+    if (handlePrismaError(error, res)) return;
+    console.error('Get target vs actual trend error:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch trend analysis' });
+  }
+};
+
 module.exports = {
   submitDailyEntry,
   getMyEntries,
@@ -637,5 +1035,8 @@ module.exports = {
   exportExcel,
   syncEntryToGoogleSheets,
   findColumnValue,
-  getEfficiencyStatus
+  getEfficiencyStatus,
+  getEmployeePerformanceHistory,
+  getPlantPerformanceHistory,
+  getTargetVsActualTrend
 };

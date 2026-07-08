@@ -45,6 +45,7 @@ model UserProfile {
   production_entries      DailyProductionEntry[]
   efficiency_alerts       EfficiencyAlert[]
   push_subscriptions      PushSubscription[]
+  downtime_records        MachineDowntime[]
 
   @@map("user_profiles")
 }
@@ -109,6 +110,7 @@ model Worksheet {
   efficiency_thresholds EfficiencyThreshold[]
   production_entries    DailyProductionEntry[]
   efficiency_alerts     EfficiencyAlert[]
+  downtime_records      MachineDowntime[]
 
   @@map("worksheets")
 }
@@ -155,6 +157,7 @@ model RowData {
   machine_assignments MachineAssignment[]
   production_entries  DailyProductionEntry[]
   efficiency_alerts   EfficiencyAlert[]
+  downtime_records    MachineDowntime[]
 
   @@map("row_data")
 }
@@ -362,4 +365,31 @@ model PushSubscription {
   user UserProfile @relation(fields: [user_id], references: [id])
 
   @@map("push_subscriptions")
+}
+
+model MachineDowntime {
+  id              String   @id @default(uuid())
+  employee_id     String
+  row_id          String
+  worksheet_id    String
+  downtime_date   DateTime @db.Date
+  category        String
+  reason          String
+  custom_reason   String?
+  duration_hours  Decimal  @db.Decimal(4, 2)
+  shift           String   @default("day")
+  notes           String?
+  status          String   @default("submitted")
+  resolution_notes String?
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+
+  employee  UserProfile @relation(fields: [employee_id], references: [id])
+  row       RowData     @relation(fields: [row_id], references: [id])
+  worksheet Worksheet   @relation(fields: [worksheet_id], references: [id])
+
+  @@index([employee_id])
+  @@index([row_id])
+  @@index([downtime_date])
+  @@map("machine_downtime")
 }

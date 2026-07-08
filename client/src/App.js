@@ -30,6 +30,9 @@ const SystemHealth = lazy(() => import('./pages/admin/SystemHealth'));
 const MachineAssignment = lazy(() => import('./pages/admin/MachineAssignment'));
 const EfficiencyDashboard = lazy(() => import('./pages/admin/EfficiencyDashboard'));
 const WeeklyReports = lazy(() => import('./pages/admin/WeeklyReports'));
+const EmployeePerformance = lazy(() => import('./pages/admin/EmployeePerformance'));
+const TrendAnalysis = lazy(() => import('./pages/admin/TrendAnalysis'));
+const DowntimeLog = lazy(() => import('./pages/admin/DowntimeLog'));
 // Prefetched: the busiest, most time-critical screen for employees on mobile data.
 const ProductionEntry = lazy(() => import(/* webpackPrefetch: true */ './pages/employee/ProductionEntry'));
 
@@ -203,6 +206,15 @@ const AppRoutes = () => {
       } />
       <Route path="/admin/reports" element={
         <AdminRoute><AppLayout><WeeklyReports /></AppLayout></AdminRoute>
+      } />
+      <Route path="/admin/performance" element={
+        <AdminRoute><AppLayout><EmployeePerformance /></AppLayout></AdminRoute>
+      } />
+      <Route path="/admin/trends" element={
+        <AdminRoute><AppLayout><TrendAnalysis /></AppLayout></AdminRoute>
+      } />
+      <Route path="/admin/downtime" element={
+        <AdminRoute><AppLayout><DowntimeLog /></AppLayout></AdminRoute>
       } />
       <Route path="*" element={<NotFound />} />
     </Routes>

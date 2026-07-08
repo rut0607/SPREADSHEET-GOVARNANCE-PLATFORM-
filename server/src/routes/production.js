@@ -9,7 +9,10 @@ const {
   getEfficiencyReport,
   getAlerts,
   resolveAlert,
-  exportExcel
+  exportExcel,
+  getEmployeePerformanceHistory,
+  getPlantPerformanceHistory,
+  getTargetVsActualTrend
 } = require('../controllers/productionController');
 
 router.post('/entry', authenticate, idempotency, submitDailyEntry);
@@ -19,5 +22,8 @@ router.get('/efficiency-report', authenticate, requireAdmin, getEfficiencyReport
 router.get('/export-excel', authenticate, requireAdmin, exportExcel);
 router.get('/alerts', authenticate, requireAdmin, getAlerts);
 router.put('/alerts/:id/resolve', authenticate, requireAdmin, resolveAlert);
+router.get('/plant-history', authenticate, requireAdmin, getPlantPerformanceHistory);
+router.get('/performance-history/:employeeId', authenticate, getEmployeePerformanceHistory);
+router.get('/trend-analysis', authenticate, requireAdmin, getTargetVsActualTrend);
 
 module.exports = router;

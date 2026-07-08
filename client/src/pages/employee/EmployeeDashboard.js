@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { StatCardGridSkeleton, ListSkeleton } from '../../components/shared/skeletons';
-import { FileSpreadsheet, CheckSquare, Bell, Clock, CheckCircle, XCircle, AlertTriangle, ClipboardList } from 'lucide-react';
+import { FileSpreadsheet, CheckSquare, Bell, Clock, CheckCircle, XCircle, AlertTriangle, ClipboardList, CheckCircle2 } from 'lucide-react';
 import usePushNotifications from '../../hooks/usePushNotifications';
 
 const NotificationsToggle = () => {
@@ -56,6 +56,8 @@ const MiniStatCard = ({ label, value, icon: Icon, iconBg, iconColor }) => (
 );
 
 const MemoMiniStatCard = React.memo(MiniStatCard);
+
+const todayISO = () => new Date().toISOString().split('T')[0];
 
 const OE_COLORS = {
   green: '#16a34a',
@@ -213,6 +215,64 @@ const EfficiencyWidget = ({ efficiency, loading, error }) => {
   );
 };
 
+const TodayActivity = ({ rows, loading }) => {
+  if (loading) {
+    return (
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+        <div className="h-5 w-40 bg-gray-200 rounded animate-pulse mb-4" />
+        <div className="space-y-2">
+          <div className="h-14 bg-gray-100 rounded-lg animate-pulse" />
+          <div className="h-14 bg-gray-100 rounded-lg animate-pulse" />
+        </div>
+      </div>
+    );
+  }
+
+  if (rows.length === 0) return null;
+
+  return (
+    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+      <h2 className="font-semibold text-gray-800 mb-4">Today's Activity</h2>
+      <div className="space-y-2">
+        {rows.map(row => (
+          <div key={row.row_id} className="flex items-center justify-between gap-3 p-3 rounded-lg border border-gray-100">
+            <div>
+              <p className="text-sm font-medium text-gray-800">{row.machine_name}</p>
+              {row.state === 'submitted' && (
+                <p className="text-xs text-gray-500 mt-0.5">Production entry submitted</p>
+              )}
+              {row.state === 'downtime' && (
+                <p className="text-xs text-gray-500 mt-0.5">{row.reason}</p>
+              )}
+              {row.state === 'pending' && (
+                <p className="text-xs text-gray-500 mt-0.5">No entry logged yet</p>
+              )}
+            </div>
+            {row.state === 'submitted' && (
+              <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700 flex-shrink-0">
+                <CheckCircle2 size={14} />
+                {row.oe_percentage !== null ? `${row.oe_percentage.toFixed(1)}%` : 'Submitted'}
+              </span>
+            )}
+            {row.state === 'downtime' && (
+              <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-700 flex-shrink-0">
+                <AlertTriangle size={14} />
+                Downtime Logged
+              </span>
+            )}
+            {row.state === 'pending' && (
+              <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-500 flex-shrink-0">
+                <Clock size={14} />
+                Pending
+              </span>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
 const EmployeeDashboard = () => {
   const { user } = useAuth();
   const [stats, setStats] = useState({
@@ -227,10 +287,14 @@ const EmployeeDashboard = () => {
   const [efficiency, setEfficiency] = useState(null);
   const [efficiencyLoading, setEfficiencyLoading] = useState(true);
   const [efficiencyError, setEfficiencyError] = useState(false);
+  const [assignedMachines, setAssignedMachines] = useState([]);
+  const [downtimeRecords, setDowntimeRecords] = useState([]);
+  const [activityLoading, setActivityLoading] = useState(true);
 
   useEffect(() => {
     fetchDashboardData();
     fetchEfficiency();
+    fetchTodayActivity();
   }, []);
 
   const fetchDashboardData = async () => {
@@ -269,6 +333,59 @@ const EmployeeDashboard = () => {
     }
   };
 
+  const fetchTodayActivity = async () => {
+    try {
+      const [assignRes, downtimeRes] = await Promise.all([
+        api.get(`/machines/employee/${user.id}`, { skipErrorToast: true }),
+        api.get('/downtime/my-downtime', { skipErrorToast: true })
+      ]);
+      setAssignedMachines(assignRes.data.data.assignments);
+      setDowntimeRecords(downtimeRes.data.data.records);
+    } catch (error) {
+      // Today's Activity section just won't render if this fails; not critical path.
+    } finally {
+      setActivityLoading(false);
+    }
+  };
+
+  const todayActivityRows = useMemo(() => {
+    if (assignedMachines.length === 0) return [];
+    const today = todayISO();
+    const pastNineAM = new Date().getHours() >= 9;
+
+    const submittedRowIds = new Set(
+      (efficiency?.entries || [])
+        .filter(e => e.entry_date.split('T')[0] === today)
+        .map(e => e.row_id)
+    );
+    const downtimeByRowId = new Map(
+      downtimeRecords
+        .filter(d => d.downtime_date.split('T')[0] === today)
+        .map(d => [d.row_id, d.category === 'Other' ? (d.custom_reason || 'Other') : d.reason])
+    );
+    const oeByRowId = new Map(
+      (efficiency?.entries || [])
+        .filter(e => e.entry_date.split('T')[0] === today)
+        .map(e => [e.row_id, e.oe_percentage !== null ? parseFloat(e.oe_percentage) * 100 : null])
+    );
+
+    return assignedMachines
+      .map(a => {
+        const machine_name = a.row.data?.machine_no || a.row.row_identifier;
+        if (submittedRowIds.has(a.row_id)) {
+          return { row_id: a.row_id, machine_name, state: 'submitted', oe_percentage: oeByRowId.get(a.row_id) ?? null };
+        }
+        if (downtimeByRowId.has(a.row_id)) {
+          return { row_id: a.row_id, machine_name, state: 'downtime', reason: downtimeByRowId.get(a.row_id) };
+        }
+        if (pastNineAM) {
+          return { row_id: a.row_id, machine_name, state: 'pending' };
+        }
+        return null;
+      })
+      .filter(Boolean);
+  }, [assignedMachines, downtimeRecords, efficiency]);
+
   if (loading) {
     return (
       <div className="p-6 space-y-6">
@@ -289,6 +406,8 @@ const EmployeeDashboard = () => {
   return (
     <div className="p-6 space-y-6">
       <EfficiencyWidget efficiency={efficiency} loading={efficiencyLoading} error={efficiencyError} />
+
+      <TodayActivity rows={todayActivityRows} loading={activityLoading || efficiencyLoading} />
 
       <div>
         <h1 className="text-2xl font-bold text-gray-800">

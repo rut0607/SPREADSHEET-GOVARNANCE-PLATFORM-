@@ -177,6 +177,8 @@ const EfficiencyDashboard = () => {
 
       const report = reportRes.data.data.report;
       const reportMap = new Map(report.map(r => [`${r.row_id}_${r.employee_id}`, r]));
+      const downtime = reportRes.data.data.downtime || [];
+      const downtimeMap = new Map(downtime.map(d => [`${d.row_id}_${d.employee_id}`, d]));
 
       const allMachines = assignmentsRes.data.data.assignments.flatMap(group =>
         group.machines.map(m => ({
@@ -190,16 +192,29 @@ const EfficiencyDashboard = () => {
       );
 
       const rows = allMachines.map(m => {
-        const entry = reportMap.get(`${m.row_id}_${m.employee_id}`);
+        const key = `${m.row_id}_${m.employee_id}`;
+        const entry = reportMap.get(key);
+        const downtimeEntry = downtimeMap.get(key);
+
+        let todayStatus;
+        if (downtimeEntry) {
+          todayStatus = { type: 'downtime', reason: downtimeEntry.reason };
+        } else if (entry) {
+          todayStatus = { type: entry.status, oe_percentage: entry.oe_percentage };
+        } else {
+          todayStatus = { type: 'no_entry' };
+        }
+
         return {
-          key: `${m.row_id}_${m.employee_id}`,
+          key,
           machine_name: m.machine_name,
           process_type: m.process_type,
           employee_name: m.employee_name,
           target: entry?.target_output ?? null,
           actual: entry?.actual_output ?? null,
           oe_percentage: entry?.oe_percentage ?? null,
-          status: entry?.status || 'gray'
+          status: entry?.status || 'gray',
+          todayStatus
         };
       });
 
@@ -380,7 +395,7 @@ const EfficiencyDashboard = () => {
                 <th className="text-left px-5 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Target</th>
                 <th className="text-left px-5 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Output</th>
                 <th className="text-left px-5 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">OE %</th>
-                <th className="text-left px-5 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                <th className="text-left px-5 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Today's Status</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -395,9 +410,19 @@ const EfficiencyDashboard = () => {
                     {row.oe_percentage !== null ? `${row.oe_percentage.toFixed(1)}%` : '—'}
                   </td>
                   <td className="px-5 py-3">
-                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${statusStyles[row.status]}`}>
-                      {row.status === 'gray' ? 'No entry' : row.status.charAt(0).toUpperCase() + row.status.slice(1)}
-                    </span>
+                    {row.todayStatus.type === 'downtime' ? (
+                      <span className="px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-700">
+                        Downtime — {row.todayStatus.reason}
+                      </span>
+                    ) : row.todayStatus.type === 'no_entry' ? (
+                      <span className="px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-500">
+                        No Entry
+                      </span>
+                    ) : (
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${statusStyles[row.todayStatus.type]}`}>
+                        {row.todayStatus.oe_percentage !== null ? `${row.todayStatus.oe_percentage.toFixed(1)}%` : '—'}
+                      </span>
+                    )}
                   </td>
                 </tr>
               ))}

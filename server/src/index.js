@@ -118,6 +118,7 @@ app.use('/api/production', require('./routes/production'));
 app.use('/api/push', require('./routes/push'));
 app.use('/api/reports', require('./routes/reports'));
 app.use('/api/admin', require('./routes/admin'));
+app.use('/api/downtime', require('./routes/downtime'));
 
 app.use((err, req, res, next) => {
   console.error(err.stack);

@@ -2,7 +2,10 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import toast from 'react-hot-toast';
-import { WifiOff, Loader2, CheckCircle2, ChevronDown, ChevronUp, Flame, RefreshCw, Send, Edit3 } from 'lucide-react';
+import {
+  WifiOff, Loader2, CheckCircle2, ChevronDown, ChevronUp, Flame, RefreshCw, Send, Edit3,
+  AlertTriangle, Wrench, Package, Zap, Users as UsersIcon, MoreHorizontal, X
+} from 'lucide-react';
 
 const TARGET_KEY_CANDIDATES = ['capacity', 'target_output', 'target', 'daily_capacity'];
 const PROCESS_KEY_CANDIDATES = ['process_type', 'process', 'machine_type'];
@@ -55,6 +58,27 @@ const clearIdempotencyKey = (rowId, entryDate) => {
 };
 
 const DEFAULT_THRESHOLD = 85;
+
+// Mirrors server/src/controllers/downtimeController.js's DOWNTIME_CATEGORIES —
+// kept in sync manually since client and server don't share a code module.
+const DOWNTIME_CATEGORIES = [
+  { name: 'Machine Issues', icon: Wrench },
+  { name: 'Material Issues', icon: Package },
+  { name: 'Power Issues', icon: Zap },
+  { name: 'Operational Issues', icon: UsersIcon },
+  { name: 'Other', icon: MoreHorizontal }
+];
+
+const DOWNTIME_REASONS = {
+  'Machine Issues': ['Machine Breakdown', 'Routine Maintenance', 'Electrical Fault', 'Mechanical Fault'],
+  'Material Issues': ['Raw Material Shortage', 'Material Quality Rejection', 'Waiting for Material'],
+  'Power Issues': ['Power Cut', 'Load Shedding', 'Generator Failure'],
+  'Operational Issues': ['Operator Absent', 'Shift Change Delay', 'Safety Inspection'],
+  Other: ['Other']
+};
+
+const MIN_DOWNTIME_HOURS = 0.5;
+const MAX_DOWNTIME_HOURS = 12;
 
 const getEfficiencyStatus = (oePercent, thresholdPercent) => {
   if (oePercent === null || oePercent === undefined) return 'gray';
@@ -120,9 +144,242 @@ const EfficiencySummaryBanner = ({ summary }) => {
   );
 };
 
+// Mobile-native bottom sheet: slides up via a CSS transform transition
+// (translateY(100%) -> translateY(0)) rather than mount/unmount, so both the
+// open and close animations play. `machine` stays set for a beat after
+// `visible` flips false, purely to let the close transition finish.
+const DowntimeSheet = ({ machine, visible, onClose, onSubmitted }) => {
+  const [category, setCategory] = useState(null);
+  const [reason, setReason] = useState(null);
+  const [customReason, setCustomReason] = useState('');
+  const [duration, setDuration] = useState(1);
+  const [shift, setShift] = useState('day');
+  const [notes, setNotes] = useState('');
+  const [notesOpen, setNotesOpen] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+
+  useEffect(() => {
+    if (!machine) return;
+    setCategory(null);
+    setReason(null);
+    setCustomReason('');
+    setDuration(1);
+    setShift('day');
+    setNotes('');
+    setNotesOpen(false);
+    setSubmitting(false);
+    setSubmitted(false);
+  }, [machine]);
+
+  if (!machine) return null;
+
+  const canSubmit = category && (category === 'Other' ? customReason.trim().length > 0 : !!reason);
+
+  const adjustDuration = (delta) => {
+    setDuration(prev => Math.min(MAX_DOWNTIME_HOURS, Math.max(MIN_DOWNTIME_HOURS, parseFloat((prev + delta).toFixed(1)))));
+  };
+
+  const handleSubmit = async () => {
+    if (!canSubmit || submitting) return;
+    setSubmitting(true);
+    try {
+      await api.post('/downtime', {
+        row_id: machine.row_id,
+        worksheet_id: machine.worksheet_id,
+        downtime_date: todayISO(),
+        category,
+        reason: category === 'Other' ? 'Other' : reason,
+        custom_reason: category === 'Other' ? customReason.trim() : undefined,
+        duration_hours: duration,
+        shift,
+        notes: notes || undefined
+      });
+      setSubmitted(true);
+      if (navigator.vibrate) navigator.vibrate(50);
+      setTimeout(() => {
+        onSubmitted?.();
+        onClose();
+      }, 2000);
+    } catch (error) {
+      // error toast handled by the axios response interceptor
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <>
+      <div
+        className={`fixed inset-0 bg-black z-40 transition-opacity duration-300 ${visible ? 'bg-opacity-50' : 'bg-opacity-0 pointer-events-none'}`}
+        onClick={onClose}
+      />
+      <div
+        className="fixed bottom-0 left-0 right-0 z-50 bg-white rounded-t-3xl max-h-[92vh] overflow-y-auto safe-bottom"
+        style={{ transform: visible ? 'translateY(0)' : 'translateY(100%)', transition: 'transform 0.3s ease' }}
+      >
+        <div className="sticky top-0 bg-white flex items-center justify-between p-4 border-b border-gray-100 rounded-t-3xl">
+          <h2 className="text-lg font-bold text-gray-900">Log Downtime for {machine.machine_name}</h2>
+          <button
+            onClick={onClose}
+            aria-label="Close"
+            className="p-2 -mr-2 text-gray-400 hover:text-gray-600 flex-shrink-0"
+            style={{ minHeight: 44, minWidth: 44 }}
+          >
+            <X size={22} />
+          </button>
+        </div>
+
+        {submitted ? (
+          <div className="p-8 text-center">
+            <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <CheckCircle2 size={32} className="text-green-600" />
+            </div>
+            <p className="text-lg font-bold text-gray-900">Downtime Logged</p>
+            <p className="text-sm text-gray-500 mt-1">Your admin has been notified.</p>
+          </div>
+        ) : (
+          <div className="p-4 space-y-5">
+            <div>
+              <p className="text-sm font-semibold text-gray-700 mb-2">Step 1 · Select Category</p>
+              <div className="space-y-2">
+                {DOWNTIME_CATEGORIES.map(({ name, icon: Icon }) => (
+                  <button
+                    key={name}
+                    type="button"
+                    onClick={() => { setCategory(name); setReason(null); }}
+                    className={`w-full flex items-center gap-3 p-4 rounded-2xl border-2 transition-colors ${
+                      category === name ? 'bg-primary-600 border-primary-600 text-white' : 'bg-white border-gray-200 text-gray-700'
+                    }`}
+                    style={{ minHeight: 60 }}
+                  >
+                    <Icon size={22} />
+                    <span className="font-semibold">{name}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className={`transition-all duration-300 overflow-hidden ${category ? 'max-h-[500px] opacity-100' : 'max-h-0 opacity-0'}`}>
+              <p className="text-sm font-semibold text-gray-700 mb-2">Step 2 · Select Reason</p>
+              {category === 'Other' ? (
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Describe the issue</label>
+                  <textarea
+                    value={customReason}
+                    onChange={e => setCustomReason(e.target.value)}
+                    rows={2}
+                    maxLength={300}
+                    placeholder="What happened?"
+                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-primary-500 outline-none"
+                  />
+                </div>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {(DOWNTIME_REASONS[category] || []).map(r => (
+                    <button
+                      key={r}
+                      type="button"
+                      onClick={() => setReason(r)}
+                      className={`px-4 py-2.5 rounded-full text-sm font-medium border-2 transition-colors ${
+                        reason === r ? 'bg-primary-600 border-primary-600 text-white' : 'bg-white border-gray-200 text-gray-700'
+                      }`}
+                      style={{ minHeight: 44 }}
+                    >
+                      {r}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div>
+              <p className="text-sm font-semibold text-gray-700 mb-2">Step 3 · Hours of Downtime</p>
+              <div className="flex items-center justify-center gap-4 bg-gray-50 rounded-2xl p-3">
+                <button
+                  type="button"
+                  onClick={() => adjustDuration(-0.5)}
+                  disabled={duration <= MIN_DOWNTIME_HOURS}
+                  className="w-12 h-12 rounded-full bg-white border border-gray-200 flex items-center justify-center text-gray-600 disabled:opacity-30 font-bold text-xl"
+                >
+                  −
+                </button>
+                <div className="text-center" style={{ minWidth: 80 }}>
+                  <p className="text-3xl font-bold text-gray-900">{duration}</p>
+                  <p className="text-xs text-gray-500">hours</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => adjustDuration(0.5)}
+                  disabled={duration >= MAX_DOWNTIME_HOURS}
+                  className="w-12 h-12 rounded-full bg-white border border-gray-200 flex items-center justify-center text-gray-600 disabled:opacity-30 font-bold text-xl"
+                >
+                  +
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <p className="text-sm font-semibold text-gray-700 mb-2">Step 4 · Shift</p>
+              <div className="grid grid-cols-2 gap-2">
+                {['day', 'night'].map(shiftOption => (
+                  <button
+                    key={shiftOption}
+                    type="button"
+                    onClick={() => setShift(shiftOption)}
+                    className={`py-3 rounded-xl text-sm font-semibold capitalize transition-colors ${
+                      shift === shiftOption ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-600'
+                    }`}
+                    style={{ minHeight: 44 }}
+                  >
+                    {shiftOption}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <button
+                type="button"
+                onClick={() => setNotesOpen(o => !o)}
+                className="flex items-center gap-1 text-sm text-gray-500 font-medium py-2"
+                style={{ minHeight: 44 }}
+              >
+                {notesOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                Add notes (optional)
+              </button>
+              {notesOpen && (
+                <textarea
+                  value={notes}
+                  onChange={e => setNotes(e.target.value)}
+                  rows={2}
+                  maxLength={500}
+                  placeholder="Any additional details..."
+                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-primary-500 outline-none"
+                />
+              )}
+            </div>
+
+            <button
+              type="button"
+              onClick={handleSubmit}
+              disabled={!canSubmit || submitting}
+              className="w-full bg-primary-600 disabled:bg-primary-300 text-white text-lg font-bold rounded-xl flex items-center justify-center gap-2 py-4"
+              style={{ minHeight: 56 }}
+            >
+              {submitting ? <Loader2 size={20} className="animate-spin" /> : <AlertTriangle size={20} />}
+              {submitting ? 'Logging...' : 'Log Downtime'}
+            </button>
+          </div>
+        )}
+      </div>
+    </>
+  );
+};
+
 const SWIPE_REVEAL_PX = 84;
 
-const MachineCard = ({ machine, form, onChange, onSubmit, submitting, result }) => {
+const MachineCard = ({ machine, form, onChange, onSubmit, submitting, result, onLogDowntime }) => {
   const [notesOpen, setNotesOpen] = useState(!!form.notes);
   const [swipeX, setSwipeX] = useState(0);
   const outputInputRef = useRef(null);
@@ -264,6 +521,16 @@ const MachineCard = ({ machine, form, onChange, onSubmit, submitting, result }) 
         {submitting ? 'Submitting...' : result ? 'Update Entry' : 'Submit'}
       </button>
 
+      <button
+        type="button"
+        onClick={() => onLogDowntime(machine)}
+        className="w-full mt-2 border-2 border-orange-200 bg-orange-50 text-orange-700 text-sm font-semibold rounded-xl flex items-center justify-center gap-2 transition-colors"
+        style={{ minHeight: 44 }}
+      >
+        <AlertTriangle size={16} />
+        Log Downtime
+      </button>
+
       {result && (
         <div className={`mt-4 border rounded-xl p-4 text-center ${result.pending ? statusStyles.gray : (statusStyles[result.status] || statusStyles.gray)}`}>
           <p className="text-xs font-medium uppercase tracking-wide">Your Efficiency</p>
@@ -292,8 +559,20 @@ const ProductionEntry = () => {
   const [submittingAll, setSubmittingAll] = useState(false);
   const [pullDistance, setPullDistance] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
+  const [downtimeMachine, setDowntimeMachine] = useState(null);
+  const [downtimeSheetVisible, setDowntimeSheetVisible] = useState(false);
   const processingQueue = useRef(false);
   const pullStartY = useRef(null);
+
+  const openDowntimeSheet = (machine) => {
+    setDowntimeMachine(machine);
+    requestAnimationFrame(() => setDowntimeSheetVisible(true));
+  };
+
+  const closeDowntimeSheet = () => {
+    setDowntimeSheetVisible(false);
+    setTimeout(() => setDowntimeMachine(null), 300);
+  };
 
   const updateForm = (rowId, patch) => {
     setFormState(prev => ({ ...prev, [rowId]: { ...prev[rowId], ...patch } }));
@@ -565,6 +844,7 @@ const ProductionEntry = () => {
               onSubmit={handleSubmit}
               submitting={submittingRowId === machine.row_id}
               result={results[machine.row_id]}
+              onLogDowntime={openDowntimeSheet}
             />
           ))
         )}
@@ -583,6 +863,12 @@ const ProductionEntry = () => {
           </button>
         </div>
       )}
+
+      <DowntimeSheet
+        machine={downtimeMachine}
+        visible={downtimeSheetVisible}
+        onClose={closeDowntimeSheet}
+      />
     </div>
   );
 };

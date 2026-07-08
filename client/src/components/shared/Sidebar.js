@@ -17,7 +17,8 @@ import {
   Cpu,
   TrendingUp,
   ClipboardList,
-  BarChart2
+  BarChart2,
+  AlertTriangle
 } from 'lucide-react';
 
 const adminLinks = [
@@ -30,6 +31,9 @@ const adminLinks = [
   { to: '/admin/machines', icon: Cpu, label: 'Machine Assignment' },
   { to: '/admin/efficiency', icon: TrendingUp, label: 'Efficiency Dashboard' },
   { to: '/admin/reports', icon: BarChart2, label: 'Weekly Reports' },
+  { to: '/admin/performance', icon: TrendingUp, label: 'Employee Performance' },
+  { to: '/admin/trends', icon: BarChart2, label: 'Trend Analysis' },
+  { to: '/admin/downtime', icon: AlertTriangle, label: 'Downtime Log' },
   { to: '/admin/approvals', icon: CheckSquare, label: 'Approvals' },
   { to: '/admin/activity', icon: Activity, label: 'Activity Feed' },
   { to: '/admin/audit', icon: Database, label: 'Audit Logs' },
