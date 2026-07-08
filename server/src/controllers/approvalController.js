@@ -1,4 +1,5 @@
 const prisma = require('../config/prisma');
+const { handlePrismaError } = require('../utils/prismaErrorHandler');
 const { notifyUser } = require('../services/pushService');
 
 const createApprovalRequest = async (req, res) => {
@@ -59,6 +60,7 @@ const createApprovalRequest = async (req, res) => {
       data: { approval }
     });
   } catch (error) {
+    if (handlePrismaError(error, res)) return;
     console.error('Create approval error:', error);
     res.status(500).json({ success: false, message: 'Failed to create approval request' });
   }
@@ -79,6 +81,7 @@ const getPendingApprovals = async (req, res) => {
 
     res.json({ success: true, data: { approvals } });
   } catch (error) {
+    if (handlePrismaError(error, res)) return;
     console.error('Get pending approvals error:', error);
     res.status(500).json({ success: false, message: 'Failed to fetch approvals' });
   }
@@ -125,6 +128,7 @@ const getAllApprovals = async (req, res) => {
       }
     });
   } catch (error) {
+    if (handlePrismaError(error, res)) return;
     console.error('Get all approvals error:', error);
     res.status(500).json({ success: false, message: 'Failed to fetch approvals' });
   }
@@ -218,6 +222,7 @@ const reviewApproval = async (req, res) => {
       data: { approval: updatedApproval }
     });
   } catch (error) {
+    if (handlePrismaError(error, res)) return;
     console.error('Review approval error:', error);
     res.status(500).json({ success: false, message: 'Failed to review approval request' });
   }

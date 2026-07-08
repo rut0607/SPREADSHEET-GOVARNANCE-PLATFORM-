@@ -1,4 +1,5 @@
 const prisma = require('../config/prisma');
+const { handlePrismaError } = require('../utils/prismaErrorHandler');
 const cache = require('../services/cacheService');
 
 const getRolePermissions = async (req, res) => {
@@ -15,6 +16,7 @@ const getRolePermissions = async (req, res) => {
 
     res.json({ success: true, data: { permissions } });
   } catch (error) {
+    if (handlePrismaError(error, res)) return;
     console.error('Get role permissions error:', error);
     res.status(500).json({ success: false, message: 'Failed to fetch permissions' });
   }
@@ -48,6 +50,7 @@ const setRolePermissions = async (req, res) => {
 
     res.json({ success: true, message: 'Role permissions updated successfully' });
   } catch (error) {
+    if (handlePrismaError(error, res)) return;
     console.error('Set role permissions error:', error);
     res.status(500).json({ success: false, message: 'Failed to update permissions' });
   }
@@ -67,6 +70,7 @@ const getUserPermissions = async (req, res) => {
 
     res.json({ success: true, data: { permissions } });
   } catch (error) {
+    if (handlePrismaError(error, res)) return;
     console.error('Get user permissions error:', error);
     res.status(500).json({ success: false, message: 'Failed to fetch user permissions' });
   }
@@ -100,6 +104,7 @@ const setUserPermissions = async (req, res) => {
 
     res.json({ success: true, message: 'User permissions updated successfully' });
   } catch (error) {
+    if (handlePrismaError(error, res)) return;
     console.error('Set user permissions error:', error);
     res.status(500).json({ success: false, message: 'Failed to update user permissions' });
   }
@@ -187,6 +192,7 @@ const getEffectivePermissions = async (req, res) => {
 
     res.json({ success: true, data: { permissions: result } });
   } catch (error) {
+    if (handlePrismaError(error, res)) return;
     console.error('Get effective permissions error:', error);
     res.status(500).json({ success: false, message: 'Failed to fetch effective permissions' });
   }

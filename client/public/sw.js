@@ -100,6 +100,10 @@ const isApiRequest = (request) => new URL(request.url).pathname.includes('/api/'
 self.addEventListener('fetch', (event) => {
   const { request } = event;
 
+  // Ignore non-http(s) requests (e.g. chrome-extension://) — the Cache API
+  // throws if asked to store one, and they're never ours to serve anyway.
+  if (!request.url.startsWith('http')) return;
+
   if (request.method === 'GET' && request.mode === 'navigate') {
     event.respondWith(
       fetch(request).catch(() => caches.match(OFFLINE_URL))

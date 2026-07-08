@@ -1,4 +1,5 @@
 const prisma = require('../config/prisma');
+const { handlePrismaError } = require('../utils/prismaErrorHandler');
 const { supabaseAdmin } = require('../config/supabase');
 const XLSX = require('xlsx');
 const cache = require('../services/cacheService');
@@ -302,6 +303,7 @@ const uploadExcel = async (req, res) => {
       }
     });
   } catch (error) {
+    if (handlePrismaError(error, res)) return;
     console.error('Upload Excel error:', error);
     res.status(500).json({ success: false, message: 'Failed to process Excel file' });
   }
@@ -330,6 +332,7 @@ const getAllSources = async (req, res) => {
     cache.set(cacheKey, sources, 300);
     res.json({ success: true, data: { sources } });
   } catch (error) {
+    if (handlePrismaError(error, res)) return;
     console.error('Get all sources error:', error);
     res.status(500).json({ success: false, message: 'Failed to fetch spreadsheet sources' });
   }
@@ -360,6 +363,7 @@ const getSourceById = async (req, res) => {
 
     res.json({ success: true, data: { source } });
   } catch (error) {
+    if (handlePrismaError(error, res)) return;
     console.error('Get source error:', error);
     res.status(500).json({ success: false, message: 'Failed to fetch spreadsheet source' });
   }
@@ -419,6 +423,7 @@ const getWorksheetData = async (req, res) => {
     cache.set(cacheKey, result, 120);
     res.json({ success: true, data: result });
   } catch (error) {
+    if (handlePrismaError(error, res)) return;
     console.error('Get worksheet data error:', error);
     res.status(500).json({ success: false, message: 'Failed to fetch worksheet data' });
   }
@@ -461,6 +466,7 @@ const updateRow = async (req, res) => {
 
     res.json({ success: true, message: 'Row updated successfully', data: { row: updated } });
   } catch (error) {
+    if (handlePrismaError(error, res)) return;
     console.error('Update row error:', error);
     res.status(500).json({ success: false, message: 'Failed to update row' });
   }

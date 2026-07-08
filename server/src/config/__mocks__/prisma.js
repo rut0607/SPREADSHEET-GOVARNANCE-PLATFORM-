@@ -23,5 +23,9 @@ module.exports = {
   userPermission: mockModel(),
   approvalRequest: mockModel(),
   auditLog: mockModel(),
-  notification: mockModel()
+  notification: mockModel(),
+  $queryRaw: jest.fn(),
+  $connect: jest.fn(),
+  $disconnect: jest.fn(),
+  connectWithRetry: jest.fn()
 };

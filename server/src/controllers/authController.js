@@ -1,5 +1,6 @@
 const { supabaseAdmin } = require('../config/supabase');
 const prisma = require('../config/prisma');
+const { handlePrismaError } = require('../utils/prismaErrorHandler');
 
 const login = async (req, res) => {
   try {
@@ -60,6 +61,7 @@ const login = async (req, res) => {
       }
     });
   } catch (error) {
+    if (handlePrismaError(error, res)) return;
     console.error('Login error:', error);
     res.status(500).json({
       success: false,
@@ -76,6 +78,7 @@ const logout = async (req, res) => {
       message: 'Logged out successfully'
     });
   } catch (error) {
+    if (handlePrismaError(error, res)) return;
     console.error('Logout error:', error);
     res.status(500).json({
       success: false,
@@ -100,6 +103,7 @@ const getMe = async (req, res) => {
       }
     });
   } catch (error) {
+    if (handlePrismaError(error, res)) return;
     console.error('Get me error:', error);
     res.status(500).json({
       success: false,
@@ -138,6 +142,7 @@ const refreshToken = async (req, res) => {
       }
     });
   } catch (error) {
+    if (handlePrismaError(error, res)) return;
     console.error('Refresh token error:', error);
     res.status(500).json({
       success: false,
@@ -171,6 +176,7 @@ const resetPasswordRequest = async (req, res) => {
       message: 'Password reset email sent if account exists'
     });
   } catch (error) {
+    if (handlePrismaError(error, res)) return;
     console.error('Reset password error:', error);
     res.status(500).json({
       success: false,

@@ -67,6 +67,16 @@ export const AuthProvider = ({ children }) => {
   const location = useLocation();
 
   useEffect(() => {
+    // Set by api.js when a 401 survives a token-refresh attempt — surfaced
+    // here (rather than in api.js, a plain module with no toast context tied
+    // to the app's mount lifecycle) since this runs right as the redirect to
+    // /login lands.
+    const expiredMessage = sessionStorage.getItem('sessionExpiredMessage');
+    if (expiredMessage) {
+      sessionStorage.removeItem('sessionExpiredMessage');
+      toast.error(expiredMessage);
+    }
+
     const storedUser = localStorage.getItem('user');
     const storedToken = localStorage.getItem('token');
 

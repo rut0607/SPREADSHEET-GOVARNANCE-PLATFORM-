@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { authenticate, requireAdmin } = require('../middleware/auth');
+const idempotency = require('../middleware/idempotency');
 const {
   submitDailyEntry,
   getMyEntries,
@@ -11,7 +12,7 @@ const {
   exportExcel
 } = require('../controllers/productionController');
 
-router.post('/entry', authenticate, submitDailyEntry);
+router.post('/entry', authenticate, idempotency, submitDailyEntry);
 router.get('/my-entries', authenticate, getMyEntries);
 router.get('/daily-report', authenticate, requireAdmin, getDailyReport);
 router.get('/efficiency-report', authenticate, requireAdmin, getEfficiencyReport);

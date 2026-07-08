@@ -1,4 +1,5 @@
 const prisma = require('../config/prisma');
+const { handlePrismaError } = require('../utils/prismaErrorHandler');
 const XLSX = require('xlsx');
 const { getGoogleSheetsClient } = require('../config/googleSheets');
 const { notifyUser, notifyAdmins } = require('../services/pushService');
@@ -335,6 +336,7 @@ const submitDailyEntry = async (req, res) => {
       }
     });
   } catch (error) {
+    if (handlePrismaError(error, res)) return;
     console.error('Submit daily entry error:', error);
     res.status(500).json({ success: false, message: 'Failed to submit production entry' });
   }
@@ -374,6 +376,7 @@ const getMyEntries = async (req, res) => {
 
     res.json({ success: true, data: { entries, ...buildEfficiencySummary(aggregateEntries) } });
   } catch (error) {
+    if (handlePrismaError(error, res)) return;
     console.error('Get my entries error:', error);
     res.status(500).json({ success: false, message: 'Failed to fetch entries' });
   }
@@ -422,6 +425,7 @@ const getDailyReport = async (req, res) => {
 
     res.json({ success: true, data: { date, report } });
   } catch (error) {
+    if (handlePrismaError(error, res)) return;
     console.error('Get daily report error:', error);
     res.status(500).json({ success: false, message: 'Failed to fetch daily report' });
   }
@@ -497,6 +501,7 @@ const getEfficiencyReport = async (req, res) => {
 
     res.json({ success: true, data: { startDate, endDate, summary } });
   } catch (error) {
+    if (handlePrismaError(error, res)) return;
     console.error('Get efficiency report error:', error);
     res.status(500).json({ success: false, message: 'Failed to fetch efficiency report' });
   }
@@ -517,6 +522,7 @@ const getAlerts = async (req, res) => {
 
     res.json({ success: true, data: { alerts } });
   } catch (error) {
+    if (handlePrismaError(error, res)) return;
     console.error('Get alerts error:', error);
     res.status(500).json({ success: false, message: 'Failed to fetch alerts' });
   }
@@ -533,6 +539,7 @@ const resolveAlert = async (req, res) => {
     await prisma.efficiencyAlert.update({ where: { id }, data: { is_resolved: true } });
     res.json({ success: true, message: 'Alert resolved successfully' });
   } catch (error) {
+    if (handlePrismaError(error, res)) return;
     console.error('Resolve alert error:', error);
     res.status(500).json({ success: false, message: 'Failed to resolve alert' });
   }
@@ -614,6 +621,7 @@ const exportExcel = async (req, res) => {
     res.setHeader('Content-Disposition', `attachment; filename=production_efficiency_${startDate}_to_${endDate}.xlsx`);
     res.send(buffer);
   } catch (error) {
+    if (handlePrismaError(error, res)) return;
     console.error('Export Excel error:', error);
     res.status(500).json({ success: false, message: 'Failed to export Excel report' });
   }

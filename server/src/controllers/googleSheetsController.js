@@ -1,4 +1,5 @@
 const prisma = require('../config/prisma');
+const { handlePrismaError } = require('../utils/prismaErrorHandler');
 const { getGoogleSheetsClient } = require('../config/googleSheets');
 
 const detectDataType = (values) => {
@@ -167,6 +168,7 @@ const connectGoogleSheet = async (req, res) => {
       }
     });
   } catch (error) {
+    if (handlePrismaError(error, res)) return;
     console.error('Connect Google Sheet error:', error);
     if (error.message?.includes('credentials')) {
       return res.status(500).json({
@@ -266,6 +268,7 @@ const syncGoogleSheet = async (req, res) => {
       data: { synced_sheets: syncedSheets, synced_at: new Date().toISOString() }
     });
   } catch (error) {
+    if (handlePrismaError(error, res)) return;
     console.error('Sync Google Sheet error:', error);
     res.status(500).json({ success: false, message: 'Failed to sync Google Sheet' });
   }
@@ -282,6 +285,7 @@ const getServiceAccountEmail = async (req, res) => {
     }
     res.json({ success: true, data: { email } });
   } catch (error) {
+    if (handlePrismaError(error, res)) return;
     console.error('Get service account email error:', error);
     res.status(500).json({ success: false, message: 'Failed to get service account email' });
   }

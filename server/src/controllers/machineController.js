@@ -1,4 +1,5 @@
 const prisma = require('../config/prisma');
+const { handlePrismaError } = require('../utils/prismaErrorHandler');
 
 const assignMachine = async (req, res) => {
   try {
@@ -43,6 +44,7 @@ const assignMachine = async (req, res) => {
       data: { assignment }
     });
   } catch (error) {
+    if (handlePrismaError(error, res)) return;
     console.error('Assign machine error:', error);
     res.status(500).json({ success: false, message: 'Failed to assign machine' });
   }
@@ -64,6 +66,7 @@ const unassignMachine = async (req, res) => {
 
     res.json({ success: true, message: 'Machine unassigned successfully' });
   } catch (error) {
+    if (handlePrismaError(error, res)) return;
     console.error('Unassign machine error:', error);
     res.status(500).json({ success: false, message: 'Failed to unassign machine' });
   }
@@ -102,6 +105,7 @@ const getEmployeeAssignments = async (req, res) => {
 
     res.json({ success: true, data: { assignments: dedupedAssignments } });
   } catch (error) {
+    if (handlePrismaError(error, res)) return;
     console.error('Get employee assignments error:', error);
     res.status(500).json({ success: false, message: 'Failed to fetch employee assignments' });
   }
@@ -145,6 +149,7 @@ const getAllAssignments = async (req, res) => {
 
     res.json({ success: true, data: { assignments: dedupedAssignments } });
   } catch (error) {
+    if (handlePrismaError(error, res)) return;
     console.error('Get all assignments error:', error);
     res.status(500).json({ success: false, message: 'Failed to fetch assignments' });
   }
@@ -184,6 +189,7 @@ const setEfficiencyThreshold = async (req, res) => {
       data: { threshold }
     });
   } catch (error) {
+    if (handlePrismaError(error, res)) return;
     console.error('Set efficiency threshold error:', error);
     res.status(500).json({ success: false, message: 'Failed to save efficiency threshold' });
   }
@@ -201,6 +207,7 @@ const getEfficiencyThresholds = async (req, res) => {
 
     res.json({ success: true, data: { thresholds } });
   } catch (error) {
+    if (handlePrismaError(error, res)) return;
     console.error('Get efficiency thresholds error:', error);
     res.status(500).json({ success: false, message: 'Failed to fetch efficiency thresholds' });
   }

@@ -1,4 +1,5 @@
 const prisma = require('../config/prisma');
+const { handlePrismaError } = require('../utils/prismaErrorHandler');
 const cache = require('../services/cacheService');
 
 const getAllRoles = async (req, res) => {
@@ -16,6 +17,7 @@ const getAllRoles = async (req, res) => {
     cache.set(cacheKey, roles, 600);
     res.json({ success: true, data: { roles } });
   } catch (error) {
+    if (handlePrismaError(error, res)) return;
     console.error('Get all roles error:', error);
     res.status(500).json({ success: false, message: 'Failed to fetch roles' });
   }
@@ -44,6 +46,7 @@ const createRole = async (req, res) => {
     cache.del('roles:all');
     res.status(201).json({ success: true, message: 'Role created successfully', data: { role } });
   } catch (error) {
+    if (handlePrismaError(error, res)) return;
     console.error('Create role error:', error);
     res.status(500).json({ success: false, message: 'Failed to create role' });
   }
@@ -66,6 +69,7 @@ const updateRole = async (req, res) => {
     cache.del('roles:all');
     res.json({ success: true, message: 'Role updated successfully', data: { role } });
   } catch (error) {
+    if (handlePrismaError(error, res)) return;
     console.error('Update role error:', error);
     res.status(500).json({ success: false, message: 'Failed to update role' });
   }
@@ -89,6 +93,7 @@ const deleteRole = async (req, res) => {
 
     res.json({ success: true, message: 'Role deleted successfully' });
   } catch (error) {
+    if (handlePrismaError(error, res)) return;
     console.error('Delete role error:', error);
     res.status(500).json({ success: false, message: 'Failed to delete role' });
   }

@@ -5,7 +5,12 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "nodemon src/index.js",
-    "test": "jest --runInBand"
+    "test": "jest --runInBand",
+    "start:prod": "pm2 start ecosystem.config.js",
+    "stop:prod": "pm2 stop alambre-cables-api",
+    "restart:prod": "pm2 restart alambre-cables-api",
+    "logs:prod": "pm2 logs alambre-cables-api",
+    "monit": "pm2 monit"
   },
   "jest": {
     "testEnvironment": "node",
@@ -31,6 +36,7 @@
     "multer": "^2.2.0",
     "node-cache": "^5.1.2",
     "node-cron": "^4.5.0",
+    "pm2": "^7.0.3",
     "prisma": "5.22.0",
     "web-push": "^3.6.7",
     "ws": "^8.21.0",

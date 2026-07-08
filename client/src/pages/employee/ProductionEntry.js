@@ -24,6 +24,36 @@ const findColumnValue = (columns, row, candidates) => {
 
 const todayISO = () => new Date().toISOString().split('T')[0];
 
+const generateUUID = () => {
+  if (window.crypto?.randomUUID) return window.crypto.randomUUID();
+  // Fallback for older browsers / non-secure contexts where crypto.randomUUID is unavailable.
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+};
+
+// Persists one idempotency key per (machine, day) across reloads, so a
+// submit that's in flight when the page refreshes/crashes replays as the
+// exact same request instead of creating a duplicate entry. Cleared once the
+// server confirms success, so a later edit on the same day gets a fresh key.
+const idempotencyStorageKey = (rowId, entryDate) => `idempotency:${rowId}:${entryDate}`;
+
+const getIdempotencyKey = (rowId, entryDate) => {
+  const storageKey = idempotencyStorageKey(rowId, entryDate);
+  let key = localStorage.getItem(storageKey);
+  if (!key) {
+    key = generateUUID();
+    localStorage.setItem(storageKey, key);
+  }
+  return key;
+};
+
+const clearIdempotencyKey = (rowId, entryDate) => {
+  localStorage.removeItem(idempotencyStorageKey(rowId, entryDate));
+};
+
 const DEFAULT_THRESHOLD = 85;
 
 const getEfficiencyStatus = (oePercent, thresholdPercent) => {
@@ -150,9 +180,11 @@ const MachineCard = ({ machine, form, onChange, onSubmit, submitting, result }) 
           <p className="text-sm text-gray-500 mt-0.5">{machine.process_type}</p>
         </div>
         {result && (
-          <span className="flex items-center gap-1 text-xs font-medium text-green-700 bg-green-50 px-2 py-1 rounded-full whitespace-nowrap">
-            <CheckCircle2 size={12} />
-            Submitted
+          <span className={`flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-full whitespace-nowrap ${
+            result.pending ? 'text-yellow-700 bg-yellow-50' : 'text-green-700 bg-green-50'
+          }`}>
+            {result.pending ? <Loader2 size={12} className="animate-spin" /> : <CheckCircle2 size={12} />}
+            {result.pending ? 'Syncing...' : 'Submitted'}
           </span>
         )}
       </div>
@@ -233,10 +265,12 @@ const MachineCard = ({ machine, form, onChange, onSubmit, submitting, result }) 
       </button>
 
       {result && (
-        <div className={`mt-4 border rounded-xl p-4 text-center ${statusStyles[result.status] || statusStyles.gray}`}>
+        <div className={`mt-4 border rounded-xl p-4 text-center ${result.pending ? statusStyles.gray : (statusStyles[result.status] || statusStyles.gray)}`}>
           <p className="text-xs font-medium uppercase tracking-wide">Your Efficiency</p>
           <p className="text-3xl font-bold mt-1">
-            {result.oe_percentage !== null && result.oe_percentage !== undefined ? `${result.oe_percentage.toFixed(1)}%` : 'N/A'}
+            {result.pending
+              ? <Loader2 size={24} className="animate-spin inline" />
+              : (result.oe_percentage !== null && result.oe_percentage !== undefined ? `${result.oe_percentage.toFixed(1)}%` : 'N/A')}
           </p>
         </div>
       )}
@@ -282,13 +316,16 @@ const ProductionEntry = () => {
       const remaining = [];
       for (const item of queue) {
         try {
-          const res = await api.post('/production/entry', item.payload);
+          const res = await api.post('/production/entry', item.payload, {
+            headers: item.idempotencyKey ? { 'Idempotency-Key': item.idempotencyKey } : {}
+          });
           setResults(prev => ({ ...prev, [item.payload.row_id]: res.data.data }));
           setDirtyRows(prev => {
             const next = new Set(prev);
             next.delete(item.payload.row_id);
             return next;
           });
+          if (item.idempotencyKey) clearIdempotencyKey(item.payload.row_id, item.payload.entry_date);
           toast.success(`Queued entry for ${item.machine_name} submitted successfully`);
         } catch (error) {
           remaining.push(item);
@@ -379,35 +416,53 @@ const ProductionEntry = () => {
       return;
     }
 
+    const entryDate = todayISO();
+    const idempotencyKey = getIdempotencyKey(machine.row_id, entryDate);
+
     const payload = {
       row_id: machine.row_id,
       worksheet_id: machine.worksheet_id,
       actual_output: form.actual_output,
-      entry_date: todayISO(),
+      entry_date: entryDate,
       shift: form.shift,
       notes: form.notes
     };
 
     if (!navigator.onLine) {
       const queue = JSON.parse(localStorage.getItem(QUEUE_KEY) || '[]');
-      queue.push({ payload, machine_name: machine.machine_name, queuedAt: Date.now() });
+      queue.push({ payload, machine_name: machine.machine_name, queuedAt: Date.now(), idempotencyKey });
       localStorage.setItem(QUEUE_KEY, JSON.stringify(queue));
       toast.success('Saved offline. It will be sent when connection is restored.');
       return;
     }
 
+    // Optimistic update: show the card as submitted (with a pending/syncing
+    // indicator) immediately, so slow connections don't feel like a hang.
+    // Rolled back to whatever was there before if the request fails.
+    const previousResult = results[machine.row_id];
+    setResults(prev => ({ ...prev, [machine.row_id]: { pending: true } }));
+
     setSubmittingRowId(machine.row_id);
     try {
-      const res = await api.post('/production/entry', payload);
+      const res = await api.post('/production/entry', payload, {
+        headers: { 'Idempotency-Key': idempotencyKey }
+      });
       setResults(prev => ({ ...prev, [machine.row_id]: res.data.data }));
       setDirtyRows(prev => {
         const next = new Set(prev);
         next.delete(machine.row_id);
         return next;
       });
+      clearIdempotencyKey(machine.row_id, entryDate);
       vibrateOnSuccess();
       toast.success('Entry submitted successfully');
     } catch (error) {
+      setResults(prev => {
+        const next = { ...prev };
+        if (previousResult) next[machine.row_id] = previousResult;
+        else delete next[machine.row_id];
+        return next;
+      });
       // error toast handled by the axios response interceptor
     } finally {
       setSubmittingRowId(null);

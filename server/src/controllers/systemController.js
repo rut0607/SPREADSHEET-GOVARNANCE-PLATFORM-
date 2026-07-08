@@ -1,3 +1,4 @@
+const { handlePrismaError } = require('../utils/prismaErrorHandler');
 const { supabaseAdmin } = require('../config/supabase');
 
 const listAllFiles = async (bucket, prefix = '') => {
@@ -32,6 +33,7 @@ const getStorageStats = async (req, res) => {
       }
     });
   } catch (error) {
+    if (handlePrismaError(error, res)) return;
     console.error('Get storage stats error:', error);
     res.status(500).json({ success: false, message: 'Failed to fetch storage stats' });
   }

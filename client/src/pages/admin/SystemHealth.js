@@ -1,11 +1,17 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import api from '../../services/api';
 import StatCard from '../../components/shared/StatCard';
 import { StatCardGridSkeleton, ListSkeleton } from '../../components/shared/skeletons';
 import {
-  Activity, Database, Users, FileText, HardDrive,
-  CheckCircle, XCircle, RefreshCw
+  Activity, Database, Users, FileText, HardDrive, Clock, MemoryStick,
+  CheckCircle, XCircle, AlertTriangle, RefreshCw
 } from 'lucide-react';
+
+const HEALTH_POLL_INTERVAL_MS = 30 * 1000;
+// Matches ecosystem.config.js's max_memory_restart (500MB) — the same
+// ceiling PM2 uses to auto-restart a leaking process.
+const MEMORY_LIMIT_MB = 500;
+const MEMORY_WARNING_PERCENT = 80;
 
 const formatBytes = (bytes) => {
   if (!bytes || bytes <= 0) return '0 B';
@@ -15,51 +21,75 @@ const formatBytes = (bytes) => {
   return `${value.toFixed(exponent === 0 ? 0 : 1)} ${units[exponent]}`;
 };
 
-const StatusRow = ({ label, ok, okLabel = 'Connected', errorLabel = 'Error' }) => (
-  <div className={`flex items-center justify-between p-3 rounded-lg ${ok ? 'bg-green-50' : 'bg-red-50'}`}>
-    <div className="flex items-center gap-2">
-      {ok ? (
-        <CheckCircle size={16} className="text-green-500" />
-      ) : (
-        <XCircle size={16} className="text-red-500" />
-      )}
-      <span className="text-sm text-gray-700">{label}</span>
+const formatUptime = (totalSeconds) => {
+  if (!totalSeconds && totalSeconds !== 0) return 'N/A';
+  const days = Math.floor(totalSeconds / 86400);
+  const hours = Math.floor((totalSeconds % 86400) / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = Math.floor(totalSeconds % 60);
+  if (days > 0) return `${days}d ${hours}h ${minutes}m`;
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  if (minutes > 0) return `${minutes}m ${seconds}s`;
+  return `${seconds}s`;
+};
+
+const StatusRow = ({ label, status, detail }) => {
+  const config = {
+    healthy: { icon: CheckCircle, color: 'text-green-500', bg: 'bg-green-50', text: 'text-green-600', label: 'Healthy' },
+    warning: { icon: AlertTriangle, color: 'text-yellow-500', bg: 'bg-yellow-50', text: 'text-yellow-600', label: 'Warning' },
+    down: { icon: XCircle, color: 'text-red-500', bg: 'bg-red-50', text: 'text-red-600', label: 'Down' }
+  }[status] || { icon: XCircle, color: 'text-gray-400', bg: 'bg-gray-50', text: 'text-gray-500', label: 'Unknown' };
+
+  const Icon = config.icon;
+
+  return (
+    <div className={`flex items-center justify-between p-3 rounded-lg ${config.bg}`}>
+      <div className="flex items-center gap-2">
+        <Icon size={16} className={config.color} />
+        <span className="text-sm text-gray-700">{label}</span>
+      </div>
+      <span className={`text-xs font-medium ${config.text}`}>
+        {detail || config.label}
+      </span>
     </div>
-    <span className={`text-xs font-medium ${ok ? 'text-green-600' : 'text-red-600'}`}>
-      {ok ? okLabel : errorLabel}
-    </span>
-  </div>
-);
+  );
+};
 
 const SystemHealth = () => {
   const [loading, setLoading] = useState(true);
-  const [apiOk, setApiOk] = useState(false);
-  const [dbOk, setDbOk] = useState(false);
   const [sources, setSources] = useState([]);
   const [totalUsers, setTotalUsers] = useState(0);
   const [totalRecords, setTotalRecords] = useState(0);
   const [storage, setStorage] = useState(null);
 
-  useEffect(() => {
-    fetchHealth();
-  }, []);
+  const [health, setHealth] = useState(null);
+  const [healthError, setHealthError] = useState(false);
+  const [lastCheckedAt, setLastCheckedAt] = useState(null);
 
-  const fetchHealth = async () => {
-    setLoading(true);
-
+  const fetchHealth = useCallback(async () => {
     try {
       const res = await api.get('/health', { skipErrorToast: true });
-      setApiOk(!!res.data?.success);
+      setHealth(res.data.data);
+      setHealthError(false);
+      setLastCheckedAt(new Date());
     } catch (error) {
-      setApiOk(false);
+      // A 503 still carries the detailed body — show it instead of a blank error state.
+      if (error.response?.data?.data) {
+        setHealth(error.response.data.data);
+        setHealthError(false);
+      } else {
+        setHealthError(true);
+      }
+      setLastCheckedAt(new Date());
     }
+  }, []);
 
+  const fetchOverview = useCallback(async () => {
     try {
       const [sourcesRes, usersRes] = await Promise.all([
         api.get('/spreadsheets', { skipErrorToast: true }),
         api.get('/users', { skipErrorToast: true })
       ]);
-      setDbOk(true);
 
       const fetchedSources = sourcesRes.data.data.sources;
       setSources(fetchedSources);
@@ -69,7 +99,7 @@ const SystemHealth = () => {
       );
       setTotalUsers(usersRes.data.data.users.length);
     } catch (error) {
-      setDbOk(false);
+      // error toast handled by the axios response interceptor
     }
 
     try {
@@ -78,11 +108,31 @@ const SystemHealth = () => {
     } catch (error) {
       setStorage(null);
     }
+  }, []);
 
+  const fetchAll = useCallback(async () => {
+    setLoading(true);
+    await Promise.all([fetchHealth(), fetchOverview()]);
     setLoading(false);
-  };
+  }, [fetchHealth, fetchOverview]);
+
+  useEffect(() => {
+    fetchAll();
+  }, [fetchAll]);
+
+  useEffect(() => {
+    const interval = setInterval(fetchHealth, HEALTH_POLL_INTERVAL_MS);
+    return () => clearInterval(interval);
+  }, [fetchHealth]);
 
   const googleSheetSources = sources.filter(s => s.source_type === 'google_sheets');
+
+  const memoryPercent = health?.services?.memory
+    ? Math.min(100, Math.round((health.services.memory.rss_mb / MEMORY_LIMIT_MB) * 100))
+    : null;
+  const memoryStatus = memoryPercent !== null
+    ? (memoryPercent >= MEMORY_WARNING_PERCENT ? 'warning' : 'healthy')
+    : 'down';
 
   if (loading) {
     return (
@@ -102,10 +152,10 @@ const SystemHealth = () => {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-800">System Health</h1>
-          <p className="text-gray-500 mt-1">Live status of core platform services</p>
+          <p className="text-gray-500 mt-1">Live status of core platform services • auto-refreshes every 30 seconds</p>
         </div>
         <button
-          onClick={fetchHealth}
+          onClick={fetchAll}
           className="flex items-center gap-2 bg-white border border-gray-200 hover:bg-gray-50 text-gray-600 px-4 py-2 rounded-lg transition-colors font-medium text-sm"
         >
           <RefreshCw size={16} />
@@ -113,7 +163,7 @@ const SystemHealth = () => {
         </button>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard title="Total Records" value={totalRecords} icon={FileText} color="bg-blue-500" />
         <StatCard title="Total Users" value={totalUsers} icon={Users} color="bg-purple-500" />
         <StatCard
@@ -122,15 +172,74 @@ const SystemHealth = () => {
           icon={HardDrive}
           color="bg-green-500"
         />
+        <StatCard
+          title="Server Uptime"
+          value={health ? formatUptime(health.uptime_seconds) : 'N/A'}
+          icon={Clock}
+          color="bg-orange-500"
+        />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          <h2 className="text-lg font-semibold text-gray-800 mb-4">Service Status</h2>
-          <div className="space-y-3">
-            <StatusRow label="API Server" ok={apiOk} />
-            <StatusRow label="Database" ok={dbOk} />
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-gray-800">Service Status</h2>
+            {lastCheckedAt && (
+              <span className="text-xs text-gray-400">
+                Last checked {lastCheckedAt.toLocaleTimeString()}
+              </span>
+            )}
           </div>
+          {healthError || !health ? (
+            <StatusRow label="API Server" status="down" detail="Unreachable" />
+          ) : (
+            <div className="space-y-3">
+              <StatusRow
+                label="Database"
+                status={health.services.database.status === 'down' ? 'down' : 'healthy'}
+                detail={
+                  health.services.database.status === 'down'
+                    ? 'Unreachable'
+                    : `${health.services.database.response_time_ms}ms`
+                }
+              />
+              <StatusRow
+                label="Storage"
+                status={health.services.storage.status === 'down' ? 'down' : 'healthy'}
+                detail={
+                  health.services.storage.status === 'down'
+                    ? 'Unreachable'
+                    : `${health.services.storage.response_time_ms}ms`
+                }
+              />
+              <StatusRow
+                label="Memory"
+                status={memoryStatus}
+                detail={memoryPercent !== null ? `${health.services.memory.rss_mb}MB (${memoryPercent}%)` : 'N/A'}
+              />
+            </div>
+          )}
+
+          {memoryPercent !== null && (
+            <div className="mt-4">
+              <div className="flex items-center justify-between text-xs text-gray-500 mb-1">
+                <span className="flex items-center gap-1"><MemoryStick size={12} /> Memory usage</span>
+                <span>{memoryPercent}% of {MEMORY_LIMIT_MB}MB limit</span>
+              </div>
+              <div className="h-2 w-full bg-gray-100 rounded-full overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all ${memoryPercent >= MEMORY_WARNING_PERCENT ? 'bg-yellow-500' : 'bg-green-500'}`}
+                  style={{ width: `${memoryPercent}%` }}
+                />
+              </div>
+              {memoryPercent >= MEMORY_WARNING_PERCENT && (
+                <p className="text-xs text-yellow-600 mt-1.5 flex items-center gap-1">
+                  <AlertTriangle size={12} />
+                  Memory usage is above {MEMORY_WARNING_PERCENT}% of the restart limit
+                </p>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">

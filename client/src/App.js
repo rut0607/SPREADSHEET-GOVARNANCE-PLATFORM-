@@ -1,6 +1,7 @@
-import React, { useState, lazy, Suspense } from 'react';
+import React, { useState, useEffect, lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { Toaster } from 'react-hot-toast';
+import { Toaster, toast } from 'react-hot-toast';
+import { RefreshCw, WifiOff } from 'lucide-react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ProtectedRoute, AdminRoute } from './components/shared/ProtectedRoute';
 import Navbar from './components/shared/Navbar';
@@ -39,6 +40,68 @@ const NotFound = () => (
     message="The page you're looking for doesn't exist or may have been moved."
   />
 );
+
+// Top-level fallback for the app-wide ErrorBoundary below. Unlike the nested
+// per-page ErrorBoundary in AppLayout (which just resets its own subtree),
+// this one is for errors severe enough to escape a whole page — a full
+// reload is the more reliable recovery, and employees never see the raw
+// error, only this branded screen.
+const AppErrorFallback = (error) => {
+  console.error('Unhandled application error:', error);
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-primary-50 to-blue-100 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-8 text-center">
+        <div className="w-16 h-16 bg-primary-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
+          <span className="bg-accent-gradient bg-clip-text text-transparent font-bold text-2xl">AC</span>
+        </div>
+        <h1 className="text-2xl font-bold text-gray-800">Something went wrong</h1>
+        <p className="text-gray-500 mt-2">
+          Alambre Cables hit an unexpected error. Reloading usually fixes it — your data is safe.
+        </p>
+        <button
+          onClick={() => window.location.reload()}
+          className="mt-6 w-full flex items-center justify-center gap-2 bg-primary-600 hover:bg-primary-700 text-white font-medium py-3 px-4 rounded-lg transition-colors"
+        >
+          <RefreshCw size={18} />
+          Reload App
+        </button>
+      </div>
+    </div>
+  );
+};
+
+// Global online/offline handling: on reconnect, toast + dispatch a custom
+// event so any page can opt in to refreshing its own data; while offline,
+// shows a persistent banner (offline production-entry queueing is handled
+// separately in that page — this is the app-wide signal).
+const ConnectivityHandler = () => {
+  const [isOffline, setIsOffline] = useState(!navigator.onLine);
+
+  useEffect(() => {
+    const handleOnline = () => {
+      setIsOffline(false);
+      toast.success('Connection restored');
+      window.dispatchEvent(new CustomEvent('app:reconnected'));
+    };
+    const handleOffline = () => setIsOffline(true);
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
+  if (!isOffline) return null;
+
+  return (
+    <div className="fixed top-14 left-0 right-0 z-40 bg-orange-500 text-white text-sm font-medium text-center py-2 px-4 flex items-center justify-center gap-2">
+      <WifiOff size={16} />
+      You are offline. Data will sync when you reconnect.
+    </div>
+  );
+};
 
 const AppLayout = ({ children }) => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -150,9 +213,10 @@ const AppRoutes = () => {
 function App() {
   return (
     <BrowserRouter>
-      <ErrorBoundary>
+      <ErrorBoundary fallback={AppErrorFallback}>
         <AuthProvider>
           <Toaster position="top-right" />
+          <ConnectivityHandler />
           <InstallPrompt />
           <AppRoutes />
         </AuthProvider>

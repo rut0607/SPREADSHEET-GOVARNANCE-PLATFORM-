@@ -1,4 +1,5 @@
 const prisma = require('../config/prisma');
+const { handlePrismaError } = require('../utils/prismaErrorHandler');
 
 const CSV_HEADERS = [
   'Date', 'User', 'Role', 'Sheet', 'Field',
@@ -47,6 +48,7 @@ const exportAuditCsv = async (req, res) => {
     res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
     res.status(200).send(csv);
   } catch (error) {
+    if (handlePrismaError(error, res)) return;
     console.error('Audit export error:', error);
     res.status(500).json({ success: false, message: 'Failed to export audit log' });
   }

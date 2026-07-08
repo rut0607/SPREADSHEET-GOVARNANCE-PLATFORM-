@@ -1,4 +1,5 @@
 const prisma = require('../config/prisma');
+const { handlePrismaError } = require('../utils/prismaErrorHandler');
 const { supabaseAdmin } = require('../config/supabase');
 const XLSX = require('xlsx');
 
@@ -11,6 +12,7 @@ const getVersions = async (req, res) => {
     });
     res.json({ success: true, data: { versions } });
   } catch (error) {
+    if (handlePrismaError(error, res)) return;
     console.error('Get versions error:', error);
     res.status(500).json({ success: false, message: 'Failed to fetch versions' });
   }
@@ -118,6 +120,7 @@ const uploadNewVersion = async (req, res) => {
       data: { version }
     });
   } catch (error) {
+    if (handlePrismaError(error, res)) return;
     console.error('Upload version error:', error);
     res.status(500).json({ success: false, message: 'Failed to upload new version' });
   }
@@ -144,6 +147,7 @@ const restoreVersion = async (req, res) => {
 
     res.json({ success: true, message: `Restored to version ${version.version_number}` });
   } catch (error) {
+    if (handlePrismaError(error, res)) return;
     console.error('Restore version error:', error);
     res.status(500).json({ success: false, message: 'Failed to restore version' });
   }
@@ -223,6 +227,7 @@ const getValidationReport = async (req, res) => {
 
     res.json({ success: true, data: { report } });
   } catch (error) {
+    if (handlePrismaError(error, res)) return;
     console.error('Validation report error:', error);
     res.status(500).json({ success: false, message: 'Failed to generate report' });
   }

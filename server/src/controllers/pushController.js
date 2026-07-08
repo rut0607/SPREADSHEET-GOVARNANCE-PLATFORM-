@@ -1,4 +1,5 @@
 const prisma = require('../config/prisma');
+const { handlePrismaError } = require('../utils/prismaErrorHandler');
 const { getVapidPublicKey } = require('../config/webPush');
 
 const subscribe = async (req, res) => {
@@ -31,6 +32,7 @@ const subscribe = async (req, res) => {
 
     res.status(201).json({ success: true, message: 'Push subscription saved successfully' });
   } catch (error) {
+    if (handlePrismaError(error, res)) return;
     console.error('Push subscribe error:', error);
     res.status(500).json({ success: false, message: 'Failed to save push subscription' });
   }
@@ -52,6 +54,7 @@ const unsubscribe = async (req, res) => {
 
     res.json({ success: true, message: 'Push subscription removed successfully' });
   } catch (error) {
+    if (handlePrismaError(error, res)) return;
     console.error('Push unsubscribe error:', error);
     res.status(500).json({ success: false, message: 'Failed to remove push subscription' });
   }
@@ -61,6 +64,7 @@ const getVapidKey = async (req, res) => {
   try {
     res.json({ success: true, data: { publicKey: getVapidPublicKey() } });
   } catch (error) {
+    if (handlePrismaError(error, res)) return;
     console.error('Get VAPID key error:', error);
     res.status(500).json({ success: false, message: 'Failed to fetch VAPID key' });
   }

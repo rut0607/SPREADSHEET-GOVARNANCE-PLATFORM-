@@ -1,4 +1,5 @@
 const prisma = require('../config/prisma');
+const { handlePrismaError } = require('../utils/prismaErrorHandler');
 const XLSX = require('xlsx');
 const { generateAndSaveWeeklyReport } = require('../services/weeklyReportService');
 
@@ -25,6 +26,7 @@ const getWeeklyReports = async (req, res) => {
 
     res.json({ success: true, data: { reports: summaries } });
   } catch (error) {
+    if (handlePrismaError(error, res)) return;
     console.error('Get weekly reports error:', error);
     res.status(500).json({ success: false, message: 'Failed to fetch weekly reports' });
   }
@@ -41,6 +43,7 @@ const getWeeklyReport = async (req, res) => {
 
     res.json({ success: true, data: { report } });
   } catch (error) {
+    if (handlePrismaError(error, res)) return;
     console.error('Get weekly report error:', error);
     res.status(500).json({ success: false, message: 'Failed to fetch weekly report' });
   }
@@ -69,6 +72,7 @@ const generateReport = async (req, res) => {
       data: { report }
     });
   } catch (error) {
+    if (handlePrismaError(error, res)) return;
     console.error('Generate report error:', error);
     res.status(500).json({ success: false, message: 'Failed to generate report' });
   }
@@ -124,6 +128,7 @@ const exportWeeklyReport = async (req, res) => {
     res.setHeader('Content-Disposition', `attachment; filename=weekly_report_${report.report_data.week_start}_to_${report.report_data.week_end}.xlsx`);
     res.send(buffer);
   } catch (error) {
+    if (handlePrismaError(error, res)) return;
     console.error('Export weekly report error:', error);
     res.status(500).json({ success: false, message: 'Failed to export weekly report' });
   }
