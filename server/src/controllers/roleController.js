@@ -7,7 +7,7 @@ const getAllRoles = async (req, res) => {
     const cacheKey = 'roles:all';
     const cached = cache.get(cacheKey);
     if (cached) {
-      return res.json({ success: true, data: { roles: cached }, cached: true });
+      return res.json({ success: true, data: { roles: cached, cached: true } });
     }
 
     const roles = await prisma.role.findMany({

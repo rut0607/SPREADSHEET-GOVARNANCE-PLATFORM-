@@ -3,6 +3,7 @@ import api from '../../services/api';
 import toast from 'react-hot-toast';
 import { BarChart2, Download, Plus, TrendingUp, TrendingDown, Minus, Sparkles } from 'lucide-react';
 import { ListSkeleton } from '../../components/shared/skeletons';
+import { WARNING_THRESHOLD, CRITICAL_THRESHOLD } from '../../constants/thresholds';
 
 const trendIcon = {
   up: <TrendingUp size={14} className="text-green-600" />,
@@ -13,8 +14,8 @@ const trendIcon = {
 
 const getOEBandColor = (oePercent) => {
   if (oePercent === null || oePercent === undefined) return 'text-gray-400';
-  if (oePercent > 85) return 'text-green-600';
-  if (oePercent >= 75) return 'text-yellow-600';
+  if (oePercent > WARNING_THRESHOLD) return 'text-green-600';
+  if (oePercent >= CRITICAL_THRESHOLD) return 'text-yellow-600';
   return 'text-red-600';
 };
 

@@ -6,13 +6,14 @@ import {
   ComposedChart, Bar, Line, BarChart, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   ResponsiveContainer, Cell
 } from 'recharts';
+import { WARNING_THRESHOLD, CRITICAL_THRESHOLD } from '../../constants/thresholds';
 
 const WEEK_OPTIONS = [4, 8, 12];
 
 const oeBand = (value) => {
   if (value === null || value === undefined) return 'gray';
-  if (value > 85) return 'green';
-  if (value >= 75) return 'yellow';
+  if (value > WARNING_THRESHOLD) return 'green';
+  if (value >= CRITICAL_THRESHOLD) return 'yellow';
   return 'red';
 };
 

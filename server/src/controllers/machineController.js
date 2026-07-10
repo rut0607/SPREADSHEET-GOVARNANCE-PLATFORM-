@@ -1,5 +1,6 @@
 const prisma = require('../config/prisma');
 const { handlePrismaError } = require('../utils/prismaErrorHandler');
+const { DEFAULT_EFFICIENCY_THRESHOLD } = require('../config/constants');
 
 const assignMachine = async (req, res) => {
   try {
@@ -111,6 +112,10 @@ const getEmployeeAssignments = async (req, res) => {
   }
 };
 
+// Loads every active assignment for every employee in one unpaginated query.
+// Fine at the current scale (25 employees), but if headcount grows past ~100
+// this should switch to paginated (page/limit) or per-employee-on-demand
+// fetching rather than one large findMany.
 const getAllAssignments = async (req, res) => {
   try {
     const assignments = await prisma.machineAssignment.findMany({
@@ -177,7 +182,7 @@ const setEfficiencyThreshold = async (req, res) => {
       create: {
         worksheet_id,
         process_type,
-        min_threshold: min_threshold !== undefined ? min_threshold : 85.00,
+        min_threshold: min_threshold !== undefined ? min_threshold : DEFAULT_EFFICIENCY_THRESHOLD,
         alert_enabled: alert_enabled !== undefined ? alert_enabled : true,
         created_by: req.user.id
       }

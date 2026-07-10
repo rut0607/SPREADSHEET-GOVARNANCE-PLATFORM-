@@ -4,7 +4,6 @@ dotenv.config();
 const express = require('express');
 const cors = require('cors');
 const compression = require('compression');
-const morgan = require('morgan');
 const helmet = require('helmet');
 const crypto = require('crypto');
 const rateLimit = require('express-rate-limit');
@@ -59,7 +58,9 @@ const allowedOrigin = process.env.CLIENT_URL || 'http://localhost:3000';
 
 app.use(helmet());
 app.use(compression());
-app.use(morgan('dev'));
+// requestLogger (below) is the single source of request logging — it covers
+// everything morgan would (method, path, status, response time) plus user ID
+// and IP, so morgan was removed to avoid double-logging every request.
 app.use(requestLogger);
 app.use(cors({
   origin: (origin, callback) => {

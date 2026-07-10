@@ -1,0 +1,71 @@
+-- ============================================
+-- SPREADSHEET GOVERNANCE PLATFORM
+-- Migration 006 - RLS Policy Review & Fixes
+-- ============================================
+-- Run this manually against the Supabase database (SQL editor or psql).
+--
+-- Context: the app enforces its own authorization in Express middleware
+-- (authenticate/requireAdmin) for every request, since all Prisma queries go
+-- through the service-role connection (DATABASE_URL/DIRECT_URL), which is not
+-- subject to RLS. RLS here is a second, independent layer of defense that only
+-- matters if a table is ever queried through the RLS-respecting
+-- `supabasePublic` client or directly from a browser with a user's JWT — it
+-- should never be the only thing standing between an employee and another
+-- employee's data.
+--
+-- This migration was produced by reviewing all RLS policies in
+-- 001_initial_schema.sql through 005_downtime_tracking.sql against 6 specific
+-- checks. Findings:
+--
+--   1. user_profiles — ALREADY CORRECT, no change needed. "Users can view own
+--      profile" (USING auth.uid() = id) means a non-admin querying this table
+--      only ever matches their own row; the separate "Admins can view all
+--      profiles" policy is the only other way in, and its EXISTS subquery
+--      requires is_admin = true. An employee cannot read another employee's
+--      profile through RLS.
+--
+--   2. row_data — ALREADY CORRECT and explicit, no change needed. "Authenticated
+--      users can view row data" (USING auth.role() = 'authenticated') is a
+--      deliberate, explicit policy — not a gap. Per the platform's design, any
+--      authenticated employee can view any spreadsheet's row data; access
+--      control for *editing* specific columns happens via role_permissions /
+--      user_permissions and the approval workflow, not via row-level
+--      visibility. Confirmed this is what was intended, not an oversight.
+--
+--   3. approval_requests — BUG FOUND AND FIXED BELOW. RLS was enabled
+--      (ALTER TABLE ... ENABLE ROW LEVEL SECURITY in 001_initial_schema.sql)
+--      but zero policies were ever defined for this table in any migration.
+--      With RLS enabled and no policies, Postgres denies all access to
+--      non-superuser roles — so today, any RLS-respecting query against this
+--      table returns nothing for anyone. That happens to fail closed rather
+--      than leaking data, but it doesn't implement the intended behavior
+--      (employees see their own requests; admins see and manage all of them),
+--      which the app currently only enforces at the Express layer
+--      (getAllApprovals scopes non-admins to requested_by = req.user.id).
+--      Fixed below with policies matching that same behavior.
+--
+--   4. notifications — ALREADY CORRECT, no change needed. "Users can view own
+--      notifications" and "Users can update own notifications" are both scoped
+--      to user_id = auth.uid(); there is no broader read policy.
+--
+--   5. machine_downtime — ALREADY CORRECT, no change needed (added in
+--      005_downtime_tracking.sql). Employees can insert/view only their own
+--      records; admins can do everything via the standard EXISTS(is_admin)
+--      pattern.
+--
+--   6. daily_production_entries — ALREADY CORRECT, no change needed (added in
+--      002_machine_assignments.sql). Employees can view/manage only their own
+--      entries; admins can view/manage all.
+--
+-- Note: role_permissions and user_permissions also have RLS enabled with no
+-- policies defined (same shape as the approval_requests bug), but neither was
+-- part of the 6 checks in this review, so they are intentionally left
+-- untouched here to keep this migration scoped to what was actually asked —
+-- flagged in the audit summary as a follow-up to review separately.
+-- ============================================
+
+CREATE POLICY "Employees can view own approval requests" ON approval_requests FOR SELECT USING (requested_by = auth.uid());
+CREATE POLICY "Employees can create own approval requests" ON approval_requests FOR INSERT WITH CHECK (requested_by = auth.uid());
+CREATE POLICY "Admins can manage all approval requests" ON approval_requests FOR ALL USING (
+    EXISTS (SELECT 1 FROM user_profiles WHERE id = auth.uid() AND is_admin = true)
+);

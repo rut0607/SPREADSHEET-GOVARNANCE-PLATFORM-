@@ -6,6 +6,8 @@ import {
   WifiOff, Loader2, CheckCircle2, ChevronDown, ChevronUp, Flame, RefreshCw, Send, Edit3,
   AlertTriangle, Wrench, Package, Zap, Users as UsersIcon, MoreHorizontal, X
 } from 'lucide-react';
+import { DEFAULT_EFFICIENCY_THRESHOLD } from '../../constants/thresholds';
+import { DOWNTIME_CATEGORY_NAMES, DOWNTIME_REASONS } from '../../constants/downtimeReasons';
 
 const TARGET_KEY_CANDIDATES = ['capacity', 'target_output', 'target', 'daily_capacity'];
 const PROCESS_KEY_CANDIDATES = ['process_type', 'process', 'machine_type'];
@@ -57,25 +59,17 @@ const clearIdempotencyKey = (rowId, entryDate) => {
   localStorage.removeItem(idempotencyStorageKey(rowId, entryDate));
 };
 
-const DEFAULT_THRESHOLD = 85;
+const DEFAULT_THRESHOLD = DEFAULT_EFFICIENCY_THRESHOLD;
 
-// Mirrors server/src/controllers/downtimeController.js's DOWNTIME_CATEGORIES —
-// kept in sync manually since client and server don't share a code module.
-const DOWNTIME_CATEGORIES = [
-  { name: 'Machine Issues', icon: Wrench },
-  { name: 'Material Issues', icon: Package },
-  { name: 'Power Issues', icon: Zap },
-  { name: 'Operational Issues', icon: UsersIcon },
-  { name: 'Other', icon: MoreHorizontal }
-];
-
-const DOWNTIME_REASONS = {
-  'Machine Issues': ['Machine Breakdown', 'Routine Maintenance', 'Electrical Fault', 'Mechanical Fault'],
-  'Material Issues': ['Raw Material Shortage', 'Material Quality Rejection', 'Waiting for Material'],
-  'Power Issues': ['Power Cut', 'Load Shedding', 'Generator Failure'],
-  'Operational Issues': ['Operator Absent', 'Shift Change Delay', 'Safety Inspection'],
-  Other: ['Other']
+const CATEGORY_ICONS = {
+  'Machine Issues': Wrench,
+  'Material Issues': Package,
+  'Power Issues': Zap,
+  'Operational Issues': UsersIcon,
+  Other: MoreHorizontal
 };
+
+const DOWNTIME_CATEGORIES = DOWNTIME_CATEGORY_NAMES.map((name) => ({ name, icon: CATEGORY_ICONS[name] }));
 
 const MIN_DOWNTIME_HOURS = 0.5;
 const MAX_DOWNTIME_HOURS = 12;

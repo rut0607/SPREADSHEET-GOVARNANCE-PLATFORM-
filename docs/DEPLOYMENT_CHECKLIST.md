@@ -4,6 +4,8 @@ Use this before every production deploy of the Spreadsheet Governance Platform.
 
 ## 1. Environment variables (server)
 
+Full reference for every variable (required/optional, defaults, examples) lives in `docs/ENVIRONMENT_VARIABLES.md` — this section is just the deploy-time highlights. Copy `server/.env.example` to `server/.env` and fill in real values.
+
 `server/src/config/validateEnv.js` enforces these 6 at boot — the process exits with code 1 and a clear list of what's missing if any are absent:
 
 - `SUPABASE_URL`
@@ -13,37 +15,41 @@ Use this before every production deploy of the Spreadsheet Governance Platform.
 - `DIRECT_URL`
 - `SUPABASE_STORAGE_BUCKET`
 
-Additional variables referenced elsewhere in the code (not boot-enforced, but required for those features to work):
+Additional variables worth double-checking before a production deploy:
 
 - `PORT` — defaults to `8000` if unset.
 - `NODE_ENV` — set to `production` in production (affects error responses, CORS defaults, Prisma logging verbosity).
 - `CLIENT_URL` — must be the real deployed frontend origin; used as the CORS `origin`. Defaults to `http://localhost:3000` if unset — **do not leave this unset in production**, it will block the real frontend.
 - `GOOGLE_SERVICE_ACCOUNT_EMAIL` / `GOOGLE_PRIVATE_KEY` — required only if Google Sheets sync is used. If left unset, `GET /api/google-sheets/service-account` and sync will return a "not configured" error rather than crashing.
-- `JWT_SECRET` — present in the current `.env` but not referenced anywhere in `server/src`; Supabase Auth issues and validates all tokens. Safe to omit unless something is added later that needs it — don't assume it's load-bearing.
-
-**Known issue to fix before copying `.env` to a new environment:** the current `server/.env` has `DATABASE_URL` listed twice. Only one value will actually take effect — clean this up so there's no ambiguity about which connection string is really in use.
-
-Create a `server/.env.example` (none currently exists) listing all of the above with placeholder values and comments on which are required vs. optional, and make sure real secrets never get committed alongside it.
+- `HEALTH_CHECK_API_KEY` — set explicitly for production so external uptime monitors have a stable key; if left unset, one is generated at boot and lost on every restart.
+- `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_EMAIL` — set explicitly so push subscriptions survive a server restart; otherwise ephemeral keys are generated each boot.
+- `DEFAULT_EFFICIENCY_THRESHOLD` — optional, defaults to `85`; only needed if the plant-wide default target OE% should differ from 85%.
+- `JWT_SECRET` — present in `.env` but not referenced anywhere in `server/src`; Supabase Auth issues and validates all tokens. Safe to omit — don't assume it's load-bearing.
 
 ## 2. Environment variables (client)
 
-- `REACT_APP_API_URL` — must point to the deployed backend's `/api` base (e.g. `https://api.yourdomain.com/api`). Defaults to `http://localhost:8000/api` if unset — will silently talk to localhost if forgotten.
+Copy `client/.env.example` to `client/.env` and fill in real values.
 
-React env vars are baked in at build time — set this **before** running `npm run build`, not just on the server.
+- `REACT_APP_API_URL` — must point to the deployed backend's `/api` base (e.g. `https://api.yourdomain.com/api`). Only trusted when the page is loaded from localhost — otherwise the API host is derived from the page's own hostname (see `client/src/services/api.js`), so this mainly matters for the production build.
+- `REACT_APP_API_PORT` — port used when deriving the API URL from the page's own hostname. Defaults to `8000`; keep in sync with the server's `PORT`.
+- `REACT_APP_SUPABASE_URL` / `REACT_APP_SUPABASE_ANON_KEY` — present in `.env` but currently unused by any code in `client/src` (no direct Supabase client-side usage exists yet). Safe to leave unset.
+
+React env vars are baked in at build time — set these **before** running `npm run build`, not just on the server.
 
 ## 3. Supabase configuration
 
 - [ ] Confirm the Supabase project used is the intended production project (not a dev/staging project).
 - [ ] `SUPABASE_SERVICE_ROLE_KEY` is only ever used server-side (`supabaseAdmin` in `server/src/config/supabase.js`) — confirm it is never exposed to the client bundle or logged.
 - [ ] Review Supabase Auth settings: email confirmation policy, password requirements, session/JWT expiry (the app additionally enforces its own 8-hour client-side inactivity timeout on top of whatever Supabase issues).
-- [ ] If Row Level Security (RLS) is enabled on any tables the app queries via `supabasePublic`, confirm policies match the app's own permission model — the app currently does its own authorization in Express middleware (`authenticate`/`requireAdmin`) rather than relying on RLS, so RLS misconfiguration could either needlessly block the service-role client or fail to add real protection for the anon client.
+- [ ] If Row Level Security (RLS) is enabled on any tables the app queries via `supabasePublic`, confirm policies match the app's own permission model — the app currently does its own authorization in Express middleware (`authenticate`/`requireAdmin`) rather than relying on RLS, so RLS misconfiguration could either needlessly block the service-role client or fail to add real protection for the anon client. See `docs/SECURITY_AUDIT.md` for the full route-by-route auth review, and make sure migration `006_rls_policy_fixes.sql` (below) has been applied.
 - [ ] Confirm `DATABASE_URL` (pooled, e.g. pgbouncer) and `DIRECT_URL` (direct connection, used by Prisma for migrations) point to the correct pooling vs. direct endpoints — using the pooled URL for migrations or the direct URL for the app's runtime connection are both common misconfigurations.
 
 ## 4. Database migrations
 
-- [ ] Run `npx prisma migrate deploy` (not `migrate dev`) against the production database before starting the server.
+- [ ] Run every file in `database/migrations/` in order (001 through 006 as of this writing) against the production database via the Supabase SQL editor — these are plain SQL files, not Prisma migrations, so `prisma migrate deploy` does not apply them.
 - [ ] Run `npx prisma generate` as part of the build/deploy pipeline so the generated client matches `prisma/schema.prisma`.
 - [ ] Confirm `database/seeds/001_seed_data.sql` (if it seeds required lookup data such as default roles) has been applied, or apply the equivalent through the app's own admin UI after first login.
+- [ ] Specifically confirm `006_rls_policy_fixes.sql` has been applied — it fixes a gap where `approval_requests` had RLS enabled but no policies defined (see `docs/SECURITY_AUDIT.md`).
 
 ## 5. Storage bucket setup
 
@@ -69,7 +75,8 @@ There is no signup flow — `POST /api/users` (the only way to create a user) it
 - [ ] `cd client && npm ci && npm run build` — verify it completes with no errors (warnings from pre-existing unused imports are expected and non-blocking).
 - [ ] `cd server && npm ci` — verify a clean install.
 - [ ] `npm test` in `server/` — confirm the Jest suite passes before deploying.
-- [ ] `node scripts/e2e-test.js` (from the repo root, with `API_BASE_URL`, `E2E_ADMIN_EMAIL`, `E2E_ADMIN_PASSWORD` set) against the staging/production URL as a final smoke test.
+- [ ] `CI=true npm test -- --watchAll=false` in `client/` — confirm the React Testing Library suite passes before deploying.
+- [ ] `node scripts/e2e-test.js` (from the repo root, with `API_BASE_URL`, `HEALTH_CHECK_API_KEY`, `E2E_ADMIN_EMAIL`, `E2E_ADMIN_PASSWORD` set) against the staging/production URL as a final smoke test — checks for credentials you don't provide are skipped rather than failed, but provide all of them here for a real signal.
 - [ ] Serve the client build behind a real web server/CDN; serve the API behind a process manager (pm2, systemd, or a container orchestrator) so it restarts on crash.
 - [ ] Confirm `NODE_ENV=production` is set for the server process — this suppresses stack traces in error responses.
 - [ ] Put the API behind HTTPS (TLS termination at a load balancer/reverse proxy) — tokens and passwords should never travel over plain HTTP.
@@ -79,5 +86,5 @@ There is no signup flow — `POST /api/users` (the only way to create a user) it
 - [ ] `curl https://api.yourdomain.com/api/health` returns `{ "success": true, ... }`.
 - [ ] Log in as the first admin through the real frontend URL.
 - [ ] Upload a test spreadsheet and confirm it appears in Supabase Storage under `excel/`.
-- [ ] Check server logs (morgan output) show real request traffic, not just `localhost` noise.
+- [ ] Check server logs (`server/src/middleware/requestLogger.js` output — method, path, status, response time, user ID, IP) show real request traffic, not just `localhost` noise, and that each request produces exactly **one** log line (morgan was removed; requestLogger is now the only logger, so a duplicate line here would mean something regressed).
 - [ ] Confirm rate limiting is active (`RateLimit-*` response headers present) and the CORS origin matches the real frontend domain (requests from any other origin should be rejected by the browser).

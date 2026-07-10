@@ -1,6 +1,7 @@
 const prisma = require('../config/prisma');
+const { DEFAULT_EFFICIENCY_THRESHOLD } = require('../config/constants');
 
-const DEFAULT_THRESHOLD = 85.00;
+const DEFAULT_THRESHOLD = DEFAULT_EFFICIENCY_THRESHOLD;
 
 const toDateKey = (date) => date.toISOString().split('T')[0];
 
@@ -29,6 +30,11 @@ const getPreviousWeekRange = () => {
   return { weekStart: lastMonday, weekEnd: lastSunday };
 };
 
+// Loads every entry for the week into memory to compute averages/breakdowns in
+// JS. At current scale (25 machines x 7 days x 2 shifts = ~350 records/week)
+// this is fine. If that grows past roughly 10,000 records per query, switch
+// the aggregation (sums/averages/counts) to the database via Prisma's
+// groupBy/aggregate instead of loading raw rows and reducing them here.
 const fetchEntriesForRange = async (weekStart, weekEnd) => {
   const startDate = new Date(Date.UTC(weekStart.getUTCFullYear(), weekStart.getUTCMonth(), weekStart.getUTCDate()));
   const endDate = new Date(Date.UTC(weekEnd.getUTCFullYear(), weekEnd.getUTCMonth(), weekEnd.getUTCDate(), 23, 59, 59, 999));

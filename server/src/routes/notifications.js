@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { authenticate } = require('../middleware/auth');
 const prisma = require('../config/prisma');
+const { handlePrismaError } = require('../utils/prismaErrorHandler');
 
 router.get('/', authenticate, async (req, res) => {
   try {
@@ -17,6 +18,7 @@ router.get('/', authenticate, async (req, res) => {
 
     res.json({ success: true, data: { notifications, unread_count: unreadCount } });
   } catch (error) {
+    if (handlePrismaError(error, res)) return;
     console.error('Get notifications error:', error);
     res.status(500).json({ success: false, message: 'Failed to fetch notifications' });
   }
@@ -30,6 +32,7 @@ router.put('/:id/read', authenticate, async (req, res) => {
     });
     res.json({ success: true, message: 'Notification marked as read' });
   } catch (error) {
+    if (handlePrismaError(error, res)) return;
     console.error('Mark notification read error:', error);
     res.status(500).json({ success: false, message: 'Failed to update notification' });
   }
@@ -43,6 +46,7 @@ router.put('/mark-all-read', authenticate, async (req, res) => {
     });
     res.json({ success: true, message: 'All notifications marked as read' });
   } catch (error) {
+    if (handlePrismaError(error, res)) return;
     console.error('Mark all notifications read error:', error);
     res.status(500).json({ success: false, message: 'Failed to update notifications' });
   }

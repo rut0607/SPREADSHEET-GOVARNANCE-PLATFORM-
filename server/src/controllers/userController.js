@@ -103,7 +103,10 @@ const resetUserPassword = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Password must be at least 8 characters' });
     }
     const { error } = await supabaseAdmin.auth.admin.updateUserById(id, { password: new_password });
-    if (error) return res.status(400).json({ success: false, message: error.message });
+    if (error) {
+      console.error('Reset password error (Supabase Auth):', error.message);
+      return res.status(400).json({ success: false, message: 'Failed to reset password. Please check the new password meets requirements and try again.' });
+    }
     res.json({ success: true, message: 'Password reset successfully' });
   } catch (error) {
     if (handlePrismaError(error, res)) return;

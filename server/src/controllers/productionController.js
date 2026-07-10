@@ -3,8 +3,9 @@ const { handlePrismaError } = require('../utils/prismaErrorHandler');
 const XLSX = require('xlsx');
 const { getGoogleSheetsClient } = require('../config/googleSheets');
 const { notifyUser, notifyAdmins } = require('../services/pushService');
+const { DEFAULT_EFFICIENCY_THRESHOLD } = require('../config/constants');
 
-const DEFAULT_THRESHOLD = 85.00;
+const DEFAULT_THRESHOLD = DEFAULT_EFFICIENCY_THRESHOLD;
 
 const TARGET_KEY_CANDIDATES = ['capacity', 'target_output', 'target', 'daily_capacity'];
 const PROCESS_KEY_CANDIDATES = ['process_type', 'process', 'machine_type'];
@@ -300,15 +301,6 @@ const submitDailyEntry = async (req, res) => {
       notes: notes || null
     };
 
-    const entry = existingEntry
-      ? await prisma.dailyProductionEntry.update({
-          where: { id: existingEntry.id },
-          data: { ...entryData, status: 'edited' }
-        })
-      : await prisma.dailyProductionEntry.create({
-          data: { ...entryData, status: 'submitted' }
-        });
-
     const threshold = await prisma.efficiencyThreshold.findUnique({
       where: { worksheet_id_process_type: { worksheet_id, process_type: processType } }
     });
@@ -316,55 +308,78 @@ const submitDailyEntry = async (req, res) => {
     const thresholdPercent = threshold ? parseFloat(threshold.min_threshold) : DEFAULT_THRESHOLD;
     const oePercent = oeRatio !== null ? oeRatio * 100 : null;
     const isBelowThreshold = threshold?.alert_enabled !== false && oePercent !== null && oePercent < thresholdPercent;
-
-    if (isBelowThreshold) {
-      await prisma.efficiencyAlert.create({
-        data: {
-          entry_id: entry.id,
-          employee_id: req.user.id,
-          worksheet_id,
-          row_id,
-          alert_type: 'below_threshold',
-          threshold_value: thresholdPercent,
-          actual_value: oeRatio,
-          is_resolved: false
-        }
-      });
-    }
-
     const oeDisplay = oePercent !== null ? oePercent.toFixed(1) : 'N/A';
-    await prisma.notification.create({
-      data: {
-        user_id: req.user.id,
-        title: 'Production Entry Recorded',
-        message: `Your output of ${parsedOutput} was recorded with an efficiency of ${oeDisplay}%.`,
-        type: isBelowThreshold ? 'warning' : 'info'
-      }
-    });
-
-    if (isBelowThreshold) {
-      const admins = await prisma.userProfile.findMany({
-        where: { is_admin: true, is_active: true },
-        select: { id: true }
-      });
-      if (admins.length > 0) {
-        await prisma.notification.createMany({
-          data: admins.map(admin => ({
-            user_id: admin.id,
-            title: 'Efficiency Below Threshold',
-            message: `${req.user.full_name} recorded ${oeDisplay}% OE on ${row.row_identifier || 'a machine'}, below the ${thresholdPercent}% threshold.`,
-            type: 'warning'
-          }))
-        });
-      }
-    }
 
     const todayColumnKey = formatDateDDMMYYYY(new Date());
     const updatedRowJson = { ...row.data, [todayColumnKey]: parsedOutput.toString() };
-    await prisma.rowData.update({
-      where: { id: row_id },
-      data: { data: updatedRowJson }
+
+    // The entry write, row_data sync, and threshold alert must all succeed or all
+    // roll back together — a partial write here would leave production records and
+    // the spreadsheet's own JSON out of sync with each other.
+    const entry = await prisma.$transaction(async (tx) => {
+      const savedEntry = existingEntry
+        ? await tx.dailyProductionEntry.update({
+            where: { id: existingEntry.id },
+            data: { ...entryData, status: 'edited' }
+          })
+        : await tx.dailyProductionEntry.create({
+            data: { ...entryData, status: 'submitted' }
+          });
+
+      await tx.rowData.update({
+        where: { id: row_id },
+        data: { data: updatedRowJson }
+      });
+
+      if (isBelowThreshold) {
+        await tx.efficiencyAlert.create({
+          data: {
+            entry_id: savedEntry.id,
+            employee_id: req.user.id,
+            worksheet_id,
+            row_id,
+            alert_type: 'below_threshold',
+            threshold_value: thresholdPercent,
+            actual_value: oeRatio,
+            is_resolved: false
+          }
+        });
+      }
+
+      return savedEntry;
     });
+
+    // Notifications are not critical data — sent after the transaction commits so a
+    // notification failure never rolls back the (already-successful) entry write.
+    try {
+      await prisma.notification.create({
+        data: {
+          user_id: req.user.id,
+          title: 'Production Entry Recorded',
+          message: `Your output of ${parsedOutput} was recorded with an efficiency of ${oeDisplay}%.`,
+          type: isBelowThreshold ? 'warning' : 'info'
+        }
+      });
+
+      if (isBelowThreshold) {
+        const admins = await prisma.userProfile.findMany({
+          where: { is_admin: true, is_active: true },
+          select: { id: true }
+        });
+        if (admins.length > 0) {
+          await prisma.notification.createMany({
+            data: admins.map(admin => ({
+              user_id: admin.id,
+              title: 'Efficiency Below Threshold',
+              message: `${req.user.full_name} recorded ${oeDisplay}% OE on ${row.row_identifier || 'a machine'}, below the ${thresholdPercent}% threshold.`,
+              type: 'warning'
+            }))
+          });
+        }
+      }
+    } catch (notifyError) {
+      console.error('Failed to create in-app notification(s) for production entry:', notifyError.message);
+    }
 
     syncEntryToGoogleSheets(entry, row, worksheet_id).catch(() => {});
 

@@ -4,6 +4,7 @@ import toast from 'react-hot-toast';
 import StatCard from '../../components/shared/StatCard';
 import { StatCardGridSkeleton, ListSkeleton } from '../../components/shared/skeletons';
 import { ClipboardList, TrendingUp, AlertTriangle, Bell, Download, CheckCircle2, ChevronDown, ChevronUp, AlertCircle } from 'lucide-react';
+import { WARNING_THRESHOLD, CRITICAL_THRESHOLD } from '../../constants/thresholds';
 
 const REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 
@@ -38,8 +39,8 @@ const daysAgoISO = (days) => {
 // Fixed OE bands used for employee-level (not per-machine-threshold) efficiency displays.
 const getOEBandColor = (oePercent) => {
   if (oePercent === null || oePercent === undefined) return 'gray';
-  if (oePercent > 85) return 'green';
-  if (oePercent >= 75) return 'yellow';
+  if (oePercent > WARNING_THRESHOLD) return 'green';
+  if (oePercent >= CRITICAL_THRESHOLD) return 'yellow';
   return 'red';
 };
 

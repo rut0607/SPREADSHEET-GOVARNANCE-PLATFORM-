@@ -11,7 +11,7 @@ const mockModel = () => ({
   count: jest.fn()
 });
 
-module.exports = {
+const mockPrisma = {
   userProfile: mockModel(),
   role: mockModel(),
   spreadsheetSource: mockModel(),
@@ -24,8 +24,23 @@ module.exports = {
   approvalRequest: mockModel(),
   auditLog: mockModel(),
   notification: mockModel(),
+  machineAssignment: mockModel(),
+  efficiencyThreshold: mockModel(),
+  dailyProductionEntry: mockModel(),
+  efficiencyAlert: mockModel(),
+  weeklyReport: mockModel(),
+  pushSubscription: mockModel(),
+  machineDowntime: mockModel(),
   $queryRaw: jest.fn(),
   $connect: jest.fn(),
   $disconnect: jest.fn(),
   connectWithRetry: jest.fn()
 };
+
+// Mirrors Prisma's two $transaction forms: an array of pending queries, or an
+// interactive callback receiving the client (here, the same mock instance).
+mockPrisma.$transaction = jest.fn((arg) => (
+  typeof arg === 'function' ? arg(mockPrisma) : Promise.all(arg)
+));
+
+module.exports = mockPrisma;

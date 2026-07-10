@@ -23,7 +23,7 @@ describe('getEffectivePermissions - admin users', () => {
       { id: 'col-2', column_key: 'salary', display_name: 'Salary', data_type: 'currency' }
     ]);
 
-    const req = { params: { userId: 'admin-1', worksheetId: 'ws-1' } };
+    const req = { params: { userId: 'admin-1', worksheetId: 'ws-1' }, user: { id: 'admin-1', is_admin: true } };
     const res = mockRes();
 
     await getEffectivePermissions(req, res);
@@ -51,13 +51,24 @@ describe('getEffectivePermissions - admin users', () => {
   it('returns 404 when the user does not exist', async () => {
     prisma.userProfile.findUnique.mockResolvedValue(null);
 
-    const req = { params: { userId: 'missing-user', worksheetId: 'ws-1' } };
+    const req = { params: { userId: 'missing-user', worksheetId: 'ws-1' }, user: { id: 'admin-1', is_admin: true } };
     const res = mockRes();
 
     await getEffectivePermissions(req, res);
 
     expect(res.status).toHaveBeenCalledWith(404);
     expect(res.json).toHaveBeenCalledWith({ success: false, message: 'User not found' });
+  });
+
+  it('returns 403 when a non-admin requests permissions for a different user', async () => {
+    const req = { params: { userId: 'other-user', worksheetId: 'ws-1' }, user: { id: 'user-1', is_admin: false } };
+    const res = mockRes();
+
+    await getEffectivePermissions(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(403);
+    expect(res.json).toHaveBeenCalledWith({ success: false, message: 'Access denied' });
+    expect(prisma.userProfile.findUnique).not.toHaveBeenCalled();
   });
 
   it('merges role permissions with user-level overrides for non-admin users', async () => {
@@ -77,7 +88,7 @@ describe('getEffectivePermissions - admin users', () => {
       }
     ]);
 
-    const req = { params: { userId: 'user-1', worksheetId: 'ws-1' } };
+    const req = { params: { userId: 'user-1', worksheetId: 'ws-1' }, user: { id: 'user-1', is_admin: false } };
     const res = mockRes();
 
     await getEffectivePermissions(req, res);

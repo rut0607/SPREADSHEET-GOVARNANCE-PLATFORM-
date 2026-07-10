@@ -5,6 +5,7 @@ import { useAuth } from '../../context/AuthContext';
 import { StatCardGridSkeleton, ListSkeleton } from '../../components/shared/skeletons';
 import { FileSpreadsheet, CheckSquare, Bell, Clock, CheckCircle, XCircle, AlertTriangle, ClipboardList, CheckCircle2 } from 'lucide-react';
 import usePushNotifications from '../../hooks/usePushNotifications';
+import { WARNING_THRESHOLD, CRITICAL_THRESHOLD } from '../../constants/thresholds';
 
 const NotificationsToggle = () => {
   const { isPushEnabled, isSupported, loading, enablePush, disablePush } = usePushNotifications();
@@ -68,8 +69,8 @@ const OE_COLORS = {
 
 const getOEBandColor = (oePercent) => {
   if (oePercent === null || oePercent === undefined) return 'gray';
-  if (oePercent > 85) return 'green';
-  if (oePercent >= 75) return 'yellow';
+  if (oePercent > WARNING_THRESHOLD) return 'green';
+  if (oePercent >= CRITICAL_THRESHOLD) return 'yellow';
   return 'red';
 };
 
@@ -78,8 +79,8 @@ const getMotivationalMessage = (weekAverage) => {
     return { text: 'Submit your first entry this week to see your efficiency trend.', color: 'gray' };
   }
   if (weekAverage > 95) return { text: 'Excellent work this week — keep it up!', color: 'green' };
-  if (weekAverage > 85) return { text: 'Good performance — you are meeting targets.', color: 'green' };
-  if (weekAverage >= 75) return { text: 'You are close to target — focus on improvement.', color: 'yellow' };
+  if (weekAverage > WARNING_THRESHOLD) return { text: 'Good performance — you are meeting targets.', color: 'green' };
+  if (weekAverage >= CRITICAL_THRESHOLD) return { text: 'You are close to target — focus on improvement.', color: 'yellow' };
   return { text: 'Your efficiency needs attention — please speak with your supervisor.', color: 'red' };
 };
 

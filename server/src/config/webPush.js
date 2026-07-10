@@ -10,6 +10,9 @@ if (!vapidPublicKey || !vapidPrivateKey) {
   vapidPrivateKey = generated.privateKey;
 }
 
+// Fallback is intentional, not a placeholder left in by mistake: the VAPID spec
+// requires a contact address so push services can reach the sender if a
+// subscription is being abused, and this is only ever used if VAPID_EMAIL is unset.
 webPush.setVapidDetails(
   process.env.VAPID_EMAIL || 'mailto:admin@alambre.com',
   vapidPublicKey,

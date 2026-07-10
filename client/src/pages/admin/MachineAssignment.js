@@ -3,6 +3,7 @@ import api from '../../services/api';
 import toast from 'react-hot-toast';
 import { Cpu, UserCircle, X, Plus, Settings2, Save, Search } from 'lucide-react';
 import { ListSkeleton } from '../../components/shared/skeletons';
+import { DEFAULT_EFFICIENCY_THRESHOLD } from '../../constants/thresholds';
 
 const MachineAssignment = () => {
   const [employees, setEmployees] = useState([]);
@@ -14,7 +15,7 @@ const MachineAssignment = () => {
   const [assignedLoading, setAssignedLoading] = useState(false);
   const [employeeSearch, setEmployeeSearch] = useState('');
   const [machineSearch, setMachineSearch] = useState('');
-  const [thresholdForm, setThresholdForm] = useState({ worksheet_id: '', process_type: '', min_threshold: 85, alert_enabled: true });
+  const [thresholdForm, setThresholdForm] = useState({ worksheet_id: '', process_type: '', min_threshold: DEFAULT_EFFICIENCY_THRESHOLD, alert_enabled: true });
   const [editingThresholdId, setEditingThresholdId] = useState(null);
   const [savingThreshold, setSavingThreshold] = useState(false);
 
@@ -104,7 +105,7 @@ const MachineAssignment = () => {
     try {
       await api.post('/machines/threshold', thresholdForm);
       toast.success('Efficiency threshold saved');
-      setThresholdForm({ worksheet_id: '', process_type: '', min_threshold: 85, alert_enabled: true });
+      setThresholdForm({ worksheet_id: '', process_type: '', min_threshold: DEFAULT_EFFICIENCY_THRESHOLD, alert_enabled: true });
       setEditingThresholdId(null);
       const res = await api.get('/machines/thresholds');
       setThresholds(res.data.data.thresholds);

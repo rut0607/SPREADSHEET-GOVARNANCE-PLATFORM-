@@ -68,39 +68,50 @@ const submitDowntime = async (req, res) => {
 
     const normalizedShift = (shift || 'day').toLowerCase() === 'night' ? 'night' : 'day';
 
-    const downtime = await prisma.machineDowntime.create({
-      data: {
-        employee_id: req.user.id,
-        row_id,
-        worksheet_id,
-        downtime_date: new Date(`${downtime_date}T00:00:00.000Z`),
-        category,
-        reason,
-        custom_reason: category === 'Other' ? custom_reason : null,
-        duration_hours: parsedDuration,
-        shift: normalizedShift,
-        notes: notes || null,
-        status: 'submitted'
-      }
-    });
+    // Only one critical write exists today (the downtime record itself), but this is
+    // wrapped in a transaction for consistency with submitDailyEntry and so any future
+    // additional critical writes here (e.g. a linked row_data update) stay atomic with it.
+    const downtime = await prisma.$transaction(async (tx) => (
+      tx.machineDowntime.create({
+        data: {
+          employee_id: req.user.id,
+          row_id,
+          worksheet_id,
+          downtime_date: new Date(`${downtime_date}T00:00:00.000Z`),
+          category,
+          reason,
+          custom_reason: category === 'Other' ? custom_reason : null,
+          duration_hours: parsedDuration,
+          shift: normalizedShift,
+          notes: notes || null,
+          status: 'submitted'
+        }
+      })
+    ));
 
     const machineName = machineNameOf(row);
     const reasonLabel = category === 'Other' ? custom_reason : reason;
 
-    const admins = await prisma.userProfile.findMany({
-      where: { is_admin: true, is_active: true },
-      select: { id: true }
-    });
-
-    if (admins.length > 0) {
-      await prisma.notification.createMany({
-        data: admins.map((admin) => ({
-          user_id: admin.id,
-          title: 'Machine Downtime Logged',
-          message: `${req.user.full_name} logged ${parsedDuration}h of downtime on ${machineName} — ${category}: ${reasonLabel}.`,
-          type: 'warning'
-        }))
+    // Notifications are not critical data — sent after the transaction commits so a
+    // notification failure never rolls back the (already-successful) downtime record.
+    try {
+      const admins = await prisma.userProfile.findMany({
+        where: { is_admin: true, is_active: true },
+        select: { id: true }
       });
+
+      if (admins.length > 0) {
+        await prisma.notification.createMany({
+          data: admins.map((admin) => ({
+            user_id: admin.id,
+            title: 'Machine Downtime Logged',
+            message: `${req.user.full_name} logged ${parsedDuration}h of downtime on ${machineName} — ${category}: ${reasonLabel}.`,
+            type: 'warning'
+          }))
+        });
+      }
+    } catch (notifyError) {
+      console.error('Failed to create in-app notification(s) for downtime submission:', notifyError.message);
     }
 
     notifyAdmins({

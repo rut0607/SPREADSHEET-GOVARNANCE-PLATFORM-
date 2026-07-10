@@ -113,10 +113,15 @@ const setUserPermissions = async (req, res) => {
 const getEffectivePermissions = async (req, res) => {
   try {
     const { userId, worksheetId } = req.params;
+
+    if (!req.user.is_admin && req.user.id !== userId) {
+      return res.status(403).json({ success: false, message: 'Access denied' });
+    }
+
     const cacheKey = `permissions:${userId}:${worksheetId}`;
     const cached = cache.get(cacheKey);
     if (cached) {
-      return res.json({ success: true, data: { permissions: cached }, cached: true });
+      return res.json({ success: true, data: { permissions: cached, cached: true } });
     }
 
     const user = await prisma.userProfile.findUnique({

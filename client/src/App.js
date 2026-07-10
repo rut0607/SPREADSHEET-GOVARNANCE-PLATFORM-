@@ -11,6 +11,7 @@ import LoadingSpinner from './components/shared/LoadingSpinner';
 import ErrorBoundary from './components/shared/ErrorBoundary';
 import ErrorPage from './components/shared/ErrorPage';
 import InstallPrompt from './components/shared/InstallPrompt';
+import UpdateBanner from './components/shared/UpdateBanner';
 
 const Login = lazy(() => import('./pages/auth/Login'));
 const AdminDashboard = lazy(() => import('./pages/admin/AdminDashboard'));
@@ -229,6 +230,7 @@ function App() {
         <AuthProvider>
           <Toaster position="top-right" />
           <ConnectivityHandler />
+          <UpdateBanner />
           <InstallPrompt />
           <AppRoutes />
         </AuthProvider>

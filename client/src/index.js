@@ -17,6 +17,19 @@ root.render(
 // served for hot-update chunks, which then fail to parse as JS).
 if ('serviceWorker' in navigator) {
   if (process.env.NODE_ENV === 'production') {
+    // sw.js calls skipWaiting()+clients.claim() on every update, so a new worker
+    // takes control almost immediately rather than sitting in a "waiting" state —
+    // the reliable signal for "an update just happened" is controllerchange, not
+    // the installing worker's statechange. Guard against firing this on the very
+    // first-ever registration (no prior controller) by capturing whether a
+    // controller already existed before this page load registered anything.
+    const hadControllerAtLoad = !!navigator.serviceWorker.controller;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (hadControllerAtLoad) {
+        window.dispatchEvent(new CustomEvent('app:update-available'));
+      }
+    });
+
     window.addEventListener('load', () => {
       navigator.serviceWorker.register('/sw.js')
         .then((registration) => {

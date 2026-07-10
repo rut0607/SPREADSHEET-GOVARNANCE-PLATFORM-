@@ -314,15 +314,28 @@ const getAllSources = async (req, res) => {
     const cacheKey = 'spreadsheets:all';
     const cached = cache.get(cacheKey);
     if (cached) {
-      return res.json({ success: true, data: { sources: cached }, cached: true });
+      return res.json({ success: true, data: { sources: cached, cached: true } });
     }
 
+    // Column definitions are included here (not just id/name/display_name/row_count)
+    // so getWorksheetData can reuse this cache entry instead of re-querying
+    // column_definitions on every worksheet/page combination — they rarely change
+    // and are small, so the extra payload size here is worth it.
     const sources = await prisma.spreadsheetSource.findMany({
       where: { is_active: true },
       include: {
         worksheets: {
           where: { is_active: true },
-          select: { id: true, name: true, display_name: true, row_count: true }
+          select: {
+            id: true,
+            name: true,
+            display_name: true,
+            row_count: true,
+            column_definitions: {
+              where: { is_active: true },
+              orderBy: { column_index: 'asc' }
+            }
+          }
         },
         creator: { select: { id: true, full_name: true, email: true } }
       },
@@ -378,22 +391,41 @@ const getWorksheetData = async (req, res) => {
     const cacheKey = `worksheet:${worksheetId}:${page}:${limit}`;
     const cached = cache.get(cacheKey);
     if (cached) {
-      return res.json({ success: true, data: cached, cached: true });
+      return res.json({ success: true, data: { ...cached, cached: true } });
     }
 
-    const worksheet = await prisma.worksheet.findUnique({
-      where: { id: worksheetId },
-      include: {
-        column_definitions: {
-          where: { is_active: true },
-          orderBy: { column_index: 'asc' }
+    // Column definitions rarely change and are already cached (alongside the full
+    // worksheet list) under spreadsheets:all — reuse them here instead of
+    // re-querying column_definitions on every worksheet/page combination.
+    let worksheetMeta = null;
+    const cachedSources = cache.get('spreadsheets:all');
+    if (cachedSources) {
+      for (const source of cachedSources) {
+        const match = source.worksheets?.find((ws) => ws.id === worksheetId);
+        if (match) {
+          worksheetMeta = match;
+          break;
         }
       }
-    });
+    }
 
-    if (!worksheet) {
+    if (!worksheetMeta) {
+      worksheetMeta = await prisma.worksheet.findUnique({
+        where: { id: worksheetId },
+        include: {
+          column_definitions: {
+            where: { is_active: true },
+            orderBy: { column_index: 'asc' }
+          }
+        }
+      });
+    }
+
+    if (!worksheetMeta) {
       return res.status(404).json({ success: false, message: 'Worksheet not found' });
     }
+
+    const columns = worksheetMeta.column_definitions;
 
     const whereClause = { worksheet_id: worksheetId, is_deleted: false };
     const totalRows = await prisma.rowData.count({ where: whereClause });
@@ -406,10 +438,10 @@ const getWorksheetData = async (req, res) => {
 
     const result = {
       worksheet: {
-        id: worksheet.id,
-        name: worksheet.name,
-        display_name: worksheet.display_name,
-        columns: worksheet.column_definitions
+        id: worksheetMeta.id,
+        name: worksheetMeta.name,
+        display_name: worksheetMeta.display_name,
+        columns
       },
       rows,
       pagination: {

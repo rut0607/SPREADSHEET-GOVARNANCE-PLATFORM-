@@ -5,6 +5,7 @@ import { useAuth } from '../../context/AuthContext';
 import { Bell, LogOut, User, Menu, X, Settings, Wifi, WifiOff } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../services/api';
+import { WARNING_THRESHOLD } from '../../constants/thresholds';
 
 const dotColors = {
   green: 'bg-green-500',
@@ -15,7 +16,7 @@ const dotColors = {
 const getSubmissionDotColor = (summary) => {
   if (!summary) return null;
   if (summary.today_submitted) {
-    return summary.today_oe !== null && summary.today_oe > 85 ? 'green' : 'yellow';
+    return summary.today_oe !== null && summary.today_oe > WARNING_THRESHOLD ? 'green' : 'yellow';
   }
   return new Date().getHours() >= 10 ? 'red' : null;
 };

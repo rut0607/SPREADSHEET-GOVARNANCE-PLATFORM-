@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { authenticate, requireAdmin } = require('../middleware/auth');
 const prisma = require('../config/prisma');
+const { handlePrismaError } = require('../utils/prismaErrorHandler');
 const {
   connectGoogleSheet,
   syncGoogleSheet,
@@ -31,6 +32,7 @@ router.put('/settings/:sourceId', authenticate, requireAdmin, async (req, res) =
       data: { source: updated }
     });
   } catch (error) {
+    if (handlePrismaError(error, res)) return;
     console.error('Update sync settings error:', error);
     res.status(500).json({ success: false, message: 'Failed to update settings' });
   }

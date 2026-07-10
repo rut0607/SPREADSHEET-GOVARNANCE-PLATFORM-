@@ -7,16 +7,23 @@
  *   node scripts/e2e-test.js
  *
  * Environment variables:
- *   API_BASE_URL      Base URL of the running API (default: http://localhost:8000/api)
- *   E2E_ADMIN_EMAIL   Admin email used to log in for the authenticated checks
- *   E2E_ADMIN_PASSWORD  Admin password used to log in for the authenticated checks
+ *   API_BASE_URL         Base URL of the running API (default: http://localhost:8000/api)
+ *   HEALTH_CHECK_API_KEY  Same value as the server's HEALTH_CHECK_API_KEY env var — sent
+ *                          as the x-api-key header for the health check. GET /api/health
+ *                          requires either this header or an authenticated admin session
+ *                          (see server/src/index.js), so without it the health check will
+ *                          correctly report 401, not "healthy".
+ *   E2E_ADMIN_EMAIL       Admin email used to log in for the authenticated checks
+ *   E2E_ADMIN_PASSWORD    Admin password used to log in for the authenticated checks
  *
- * If E2E_ADMIN_EMAIL / E2E_ADMIN_PASSWORD are not set, the login-dependent
- * checks are skipped (reported as SKIP, not FAIL) so this script can still
- * verify the health endpoint in environments without test credentials.
+ * Each of HEALTH_CHECK_API_KEY and E2E_ADMIN_EMAIL/E2E_ADMIN_PASSWORD is
+ * independently optional — whichever aren't set have their checks reported as
+ * SKIP (not FAIL), so this script still exits 0 in environments that only
+ * have some of these credentials available.
  */
 
 const API_BASE_URL = process.env.API_BASE_URL || 'http://localhost:8000/api';
+const HEALTH_CHECK_API_KEY = process.env.HEALTH_CHECK_API_KEY;
 const ADMIN_EMAIL = process.env.E2E_ADMIN_EMAIL;
 const ADMIN_PASSWORD = process.env.E2E_ADMIN_PASSWORD;
 
@@ -48,16 +55,22 @@ const request = async (path, options = {}) => {
 const run = async () => {
   console.log(`Running E2E smoke tests against ${API_BASE_URL}\n`);
 
-  // 1. Health endpoint
-  try {
-    const { status, body } = await request('/health');
-    if (status === 200 && body?.success === true) {
-      record('Health endpoint responds', 'PASS');
-    } else {
-      record('Health endpoint responds', 'FAIL', `status=${status}, body=${JSON.stringify(body)}`);
+  // 1. Health endpoint — requires either x-api-key or an authenticated admin
+  // session (see server/src/index.js), so this is skipped rather than failed
+  // when no key is provided, same as the login-dependent checks below.
+  if (!HEALTH_CHECK_API_KEY) {
+    record('Health endpoint responds', 'SKIP', 'HEALTH_CHECK_API_KEY not set');
+  } else {
+    try {
+      const { status, body } = await request('/health', { headers: { 'x-api-key': HEALTH_CHECK_API_KEY } });
+      if (status === 200 && body?.success === true) {
+        record('Health endpoint responds', 'PASS');
+      } else {
+        record('Health endpoint responds', 'FAIL', `status=${status}, body=${JSON.stringify(body)}`);
+      }
+    } catch (error) {
+      record('Health endpoint responds', 'FAIL', error.message);
     }
-  } catch (error) {
-    record('Health endpoint responds', 'FAIL', error.message);
   }
 
   if (!ADMIN_EMAIL || !ADMIN_PASSWORD) {

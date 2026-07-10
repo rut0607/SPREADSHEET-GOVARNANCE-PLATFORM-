@@ -7,8 +7,12 @@ import queryCache from './queryCache';
 // "localhost" in that env var would resolve to the phone itself, so derive
 // the API host from the page's own hostname instead.
 const isLocalhost = ['localhost', '127.0.0.1'].includes(window.location.hostname);
+// Falls back to the server's default port (see server/.env's PORT) when neither
+// REACT_APP_API_URL applies (LAN testing) nor is set at all — overridable via
+// REACT_APP_API_PORT if the backend is ever run on a non-default port.
+const API_PORT = process.env.REACT_APP_API_PORT || '8000';
 const API_URL = (isLocalhost && process.env.REACT_APP_API_URL)
-  || `${window.location.protocol}//${window.location.hostname}:8000/api`;
+  || `${window.location.protocol}//${window.location.hostname}:${API_PORT}/api`;
 
 const REQUEST_TIMEOUT_MS = 15000;
 const GET_RETRY_DELAYS_MS = [1000, 2000];
@@ -120,7 +124,12 @@ api.interceptors.response.use(
     if (response.config.method === 'get') {
       const cacheKey = response.config.url + JSON.stringify(response.config.params || {});
       const isCacheable = CACHEABLE_URLS.some(url => response.config.url.includes(url));
-      if (isCacheable && !response.cached) {
+      // response.data is the JSON body ({ success, data }); the server marks its own
+      // cache hits at data.cached, so this avoids re-caching something already served
+      // from the server's cache. (Previously checked response.cached, which is never
+      // set by anything and was always undefined — this condition was effectively a
+      // no-op until the server started nesting `cached` inside `data`.)
+      if (isCacheable && !response.data?.data?.cached) {
         queryCache.set(cacheKey, response.data, 120);
       }
     }

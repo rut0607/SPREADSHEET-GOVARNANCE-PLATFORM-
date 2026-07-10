@@ -4,6 +4,7 @@ const multer = require('multer');
 const path = require('path');
 const { authenticate, requireAdmin } = require('../middleware/auth');
 const prisma = require('../config/prisma');
+const { handlePrismaError } = require('../utils/prismaErrorHandler');
 const {
   uploadExcel,
   getAllSources,
@@ -50,6 +51,7 @@ router.put('/column/:columnId', authenticate, requireAdmin, async (req, res) => 
 
     res.json({ success: true, message: 'Column updated successfully', data: { column: updated } });
   } catch (error) {
+    if (handlePrismaError(error, res)) return;
     console.error('Update column error:', error);
     res.status(500).json({ success: false, message: 'Failed to update column' });
   }

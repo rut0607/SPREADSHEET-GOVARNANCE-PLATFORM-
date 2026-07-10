@@ -9,8 +9,9 @@ import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   ReferenceLine, Cell
 } from 'recharts';
+import { DEFAULT_EFFICIENCY_THRESHOLD, WARNING_THRESHOLD, CRITICAL_THRESHOLD } from '../../constants/thresholds';
 
-const DEFAULT_THRESHOLD = 85;
+const DEFAULT_THRESHOLD = DEFAULT_EFFICIENCY_THRESHOLD;
 const DAY_OPTIONS = [30, 60, 90];
 
 const trendMeta = {
@@ -21,8 +22,8 @@ const trendMeta = {
 
 const oeColor = (value) => {
   if (value === null || value === undefined) return '#9CA3AF';
-  if (value > 85) return '#16A34A';
-  if (value >= 75) return '#CA8A04';
+  if (value > WARNING_THRESHOLD) return '#16A34A';
+  if (value >= CRITICAL_THRESHOLD) return '#CA8A04';
   return '#DC2626';
 };
 
